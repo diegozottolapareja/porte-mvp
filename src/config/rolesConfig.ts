@@ -1,23 +1,36 @@
-// ─── Roles, permisos y módulos — ORIGEN Fitness ───────────────────────────────
+// ─── Roles, permisos y módulos — PORTE ────────────────────────────────────────
+// data_entry opera sobre las 8 entidades del Excel sin filtrar (carga, edición,
+// borrado lógico). La diferencia con admin no es "a qué entra" sino qué ve
+// además: tablero gerencial (dashboard) y configuración de listas maestras (config).
 
 export type Permission =
   | '*'
   | 'dashboard:view'
-  | 'schedule:view'
-  | 'schedule:manage'
-  | 'attendance:create'
-  | 'attendance:review'
-  | 'attendance:edit'
-  | 'entities:read'
-  | 'entities:write'
-  | 'entities:delete'
-  | 'users:read'
-  | 'users:manage'
-  | 'reports:view'
-  | 'reports:export'
-  | 'settings:read'
-  | 'settings:write'
-  | 'platform:manage'
+  | 'presupuestos:read'
+  | 'presupuestos:write'
+  | 'presupuestos:delete'
+  | 'ventas:read'
+  | 'ventas:write'
+  | 'ingresos:read'
+  | 'ingresos:write'
+  | 'ingresos:delete'
+  | 'egresos:read'
+  | 'egresos:write'
+  | 'egresos:delete'
+  | 'proveedores:read'
+  | 'proveedores:write'
+  | 'proveedores:delete'
+  | 'gastosfijos:read'
+  | 'gastosfijos:write'
+  | 'gastosfijos:delete'
+  | 'variaciones:read'
+  | 'variaciones:write'
+  | 'variaciones:delete'
+  | 'aprendizajes:read'
+  | 'aprendizajes:write'
+  | 'aprendizajes:delete'
+  | 'config:read'
+  | 'config:write'
 
 export interface RoleConfig {
   label: string
@@ -27,57 +40,27 @@ export interface RoleConfig {
 }
 
 export const rolesConfig: Record<string, RoleConfig> = {
-  superAdmin: {
-    label: 'Super Admin',
-    permissions: ['*'],
-    modules: ['*'],
-    defaultRoute: '/super/dashboard',
-  },
-
   admin: {
     label: 'Administrador',
-    permissions: [
-      'dashboard:view',
-      'schedule:view', 'schedule:manage',
-      'attendance:review', 'attendance:edit',
-      'entities:read', 'entities:write', 'entities:delete',
-      'users:read', 'users:manage',
-      'reports:view', 'reports:export',
-      'settings:read', 'settings:write',
-    ],
-    modules: ['dashboard', 'schedule', 'attendance', 'entities', 'users', 'reports', 'notifications', 'profile', 'settings'],
-    defaultRoute: '/admin/dashboard',
-  },
-
-  profesor: {
-    label: 'Profesor',
-    permissions: [
-      'dashboard:view',
-      'schedule:view',
-      'attendance:create',
-      'entities:read',
-    ],
-    modules: ['dashboard', 'schedule', 'attendance', 'notifications', 'profile'],
+    permissions: ['*'],
+    modules: ['*'],
     defaultRoute: '/dashboard',
   },
 
-  manager: {
-    label: 'Manager',
+  dataEntry: {
+    label: 'Carga de datos',
     permissions: [
-      'dashboard:view',
-      'schedule:view',
-      'entities:read',
-      'reports:view', 'reports:export',
+      'presupuestos:read', 'presupuestos:write', 'presupuestos:delete',
+      'ventas:read', 'ventas:write',
+      'ingresos:read', 'ingresos:write', 'ingresos:delete',
+      'egresos:read', 'egresos:write', 'egresos:delete',
+      'proveedores:read', 'proveedores:write', 'proveedores:delete',
+      'gastosfijos:read', 'gastosfijos:write', 'gastosfijos:delete',
+      'variaciones:read', 'variaciones:write', 'variaciones:delete',
+      'aprendizajes:read', 'aprendizajes:write', 'aprendizajes:delete',
     ],
-    modules: ['dashboard', 'reports', 'schedule', 'notifications', 'profile'],
-    defaultRoute: '/manager/dashboard',
-  },
-
-  visitor: {
-    label: 'Visitante',
-    permissions: ['schedule:view'],
-    modules: ['schedule'],
-    defaultRoute: '/schedule',
+    modules: ['carga', 'ventas', 'ingresos', 'egresos', 'proveedores', 'gastosfijos', 'variaciones', 'aprendizajes', 'profile'],
+    defaultRoute: '/carga',
   },
 }
 

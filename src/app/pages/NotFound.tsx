@@ -2,13 +2,8 @@ import { useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { Home, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { appConfig, type Role } from '@/config/appConfig'
-
-function defaultRoute(role?: Role): string {
-  if (!role) return '/'
-  if (role === 'admin' || role === 'superAdmin') return '/admin/dashboard'
-  return '/seller/sales'
-}
+import { appConfig } from '@/config/appConfig'
+import { getDefaultRoute } from '@/config/navigationConfig'
 
 export default function NotFound() {
   const navigate = useNavigate()
@@ -36,7 +31,7 @@ export default function NotFound() {
         <div className="flex flex-col gap-3">
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={() => navigate(defaultRoute(user?.role))}
+            onClick={() => navigate(user ? getDefaultRoute(user.role) : '/')}
             className="w-full py-4 bg-white text-surface-dark rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-white/90 transition-all"
           >
             <Home className="w-5 h-5" />

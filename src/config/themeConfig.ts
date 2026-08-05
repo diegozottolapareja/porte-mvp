@@ -15,18 +15,18 @@
 export const themeConfig = {
   // Modo claro
   light: {
-    primary: '#2e7d32',       // Verde corporativo → cambiar por color de marca
-    accent: '#388e3c',
-    surfaceDark: '#0d2b0d',
-    surfaceDarkMid: '#1a4a1a',
+    primary: '#37474f',       // Gris acero — paleta metalúrgica PORTE
+    accent: '#546e7a',
+    surfaceDark: '#1c2529',
+    surfaceDarkMid: '#2e3d45',
   },
 
   // Modo oscuro
   dark: {
-    primary: '#9333ea',       // Púrpura → cambiar por color de marca en modo oscuro
-    accent: '#8b2e5f',
-    surfaceDark: '#1a0a2e',
-    surfaceDarkMid: '#2d1548',
+    primary: '#546e7a',
+    accent: '#78909c',
+    surfaceDark: '#1c2529',
+    surfaceDarkMid: '#2e3d45',
   },
 
   // Geometría

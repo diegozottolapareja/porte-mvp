@@ -35,7 +35,7 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        enabled: true,   // enables SW in dev so you can test offline behavior
+        enabled: false,  // SW in dev caches assets and doesn't auto-update — re-enable only for explicit offline testing
       },
     }),
   ],

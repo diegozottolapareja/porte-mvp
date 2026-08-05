@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router'
-import { Wheat, ShieldCheck, Star, User, Eye, EyeOff, Fingerprint, AlertCircle } from 'lucide-react'
+import { ShieldCheck, ClipboardList, Eye, EyeOff, Fingerprint, AlertCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { toast } from 'sonner'
 import { useAuth, isWebAuthnSupported, type LoginCredentials } from '../contexts/AuthContext'
 import { SplashScreen } from '@/components/SplashScreen'
 import { OptionCard } from '@/components/OptionCard'
 import { appConfig, type Role } from '@/config/appConfig'
+import { getDefaultRoute } from '@/config/navigationConfig'
 import logo from '/logo.svg'
 import ForgotPassword from './ForgotPassword'
 
@@ -20,40 +21,26 @@ function DemoLogin() {
 
   const handleSelect = (role: Role) => {
     loginAsDemo(role)
-    navigate(from ?? roleDefaultRoute(role))
+    navigate(from ?? getDefaultRoute(role))
   }
 
   return (
     <div className="space-y-4">
       <p className="text-center text-white/40 text-xs uppercase tracking-widest mb-6">Modo Demo — elegir rol</p>
       <OptionCard
-        icon={<Wheat className="w-7 h-7 text-white" />}
-        title={appConfig.ROLES.profesor}
-        description="Agenda, asistencias y clases del día"
-        onClick={() => handleSelect('profesor')}
-      />
-      <OptionCard
-        icon={<User className="w-7 h-7 text-white" />}
-        title={appConfig.ROLES.manager}
-        description="Reportes y métricas del negocio"
-        onClick={() => handleSelect('manager')}
-        accentClass="from-green-500/0 via-green-500/10 to-green-500/0 group-hover:via-green-500/20"
-      />
-      <OptionCard
         icon={<ShieldCheck className="w-7 h-7 text-white" />}
         title={appConfig.ROLES.admin}
-        description="Panel de control y gestión general"
+        description="Panel de control, presupuestos, ventas y reportes"
         onClick={() => handleSelect('admin')}
         accentClass="from-blue-500/0 via-blue-500/10 to-blue-500/0 group-hover:via-blue-500/20"
       />
-      {/* SuperAdmin: acceso discreto — no es un rol operativo */}
-      <button
-        onClick={() => handleSelect('superAdmin')}
-        className="w-full flex items-center justify-center gap-2 py-2.5 text-white/25 hover:text-white/50 text-xs transition-colors"
-      >
-        <Star className="w-3.5 h-3.5" />
-        Acceso administración de plataforma
-      </button>
+      <OptionCard
+        icon={<ClipboardList className="w-7 h-7 text-white" />}
+        title={appConfig.ROLES.dataEntry}
+        description="Carga rápida de ingresos, egresos y presupuestos"
+        onClick={() => handleSelect('dataEntry')}
+        accentClass="from-green-500/0 via-green-500/10 to-green-500/0 group-hover:via-green-500/20"
+      />
     </div>
   )
 }
@@ -68,7 +55,7 @@ function RealLogin() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<Role>('profesor')
+  const [role, setRole] = useState<Role>('admin')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [biometricLoading, setBiometricLoading] = useState(false)
@@ -86,7 +73,7 @@ function RealLogin() {
     try {
       const creds: LoginCredentials = { email, password, role }
       await login(creds)
-      navigate(from ?? roleDefaultRoute(role))
+      navigate(from ?? getDefaultRoute(role))
     } catch {
       setError('Email o contraseña incorrectos')
     } finally {
@@ -98,7 +85,7 @@ function RealLogin() {
     setBiometricLoading(true)
     try {
       await loginWithBiometrics(role)
-      navigate(from ?? roleDefaultRoute(role))
+      navigate(from ?? getDefaultRoute(role))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error de autenticación biométrica'
       toast.error(msg)
@@ -112,7 +99,7 @@ function RealLogin() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Role selector */}
         <div className="flex gap-2 p-1 bg-white/10 rounded-2xl">
-          {(['profesor', 'admin'] as Role[]).map(r => (
+          {(['admin', 'dataEntry'] as Role[]).map(r => (
             <button
               key={r}
               type="button"
@@ -213,24 +200,6 @@ function RealLogin() {
   )
 }
 
-// ─── Route helpers ────────────────────────────────────────────────────────────
-
-function roleDefaultRoute(role: Role): string {
-  switch (role) {
-    case 'superAdmin':
-      return '/super/dashboard'
-    case 'admin':
-      return '/admin/dashboard'
-    case 'manager':
-      return '/manager/dashboard'
-    case 'visitor':
-      return '/schedule'
-    case 'profesor':
-    default:
-      return '/dashboard'
-  }
-}
-
 // ─── Main Login page ──────────────────────────────────────────────────────────
 
 export default function Login() {
@@ -238,10 +207,9 @@ export default function Login() {
   const navigate = useNavigate()
   const [showSplash, setShowSplash] = useState(true)
 
-  // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated && user) {
-      navigate(roleDefaultRoute(user.role), { replace: true })
+      navigate(getDefaultRoute(user.role), { replace: true })
     }
   }, [isAuthenticated, user, navigate])
 

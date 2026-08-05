@@ -1,4 +1,4 @@
-// ─── Entidad principal: Clase — ORIGEN Fitness ────────────────────────────────
+// ─── Entidad principal: Venta — PORTE ─────────────────────────────────────────
 
 export type FieldType = 'text' | 'number' | 'currency' | 'date' | 'time' | 'select' | 'badge' | 'phone' | 'textarea'
 
@@ -23,29 +23,32 @@ export interface EntityStatus {
 }
 
 export const entityConfig = {
-  nameSingular: 'Clase',
-  namePlural: 'Clases',
+  nameSingular: 'Venta',
+  namePlural: 'Ventas',
   primaryKey: 'id',
 
   fields: [
-    { key: 'nombre',    label: 'Nombre',           type: 'text',   required: true,  showInTable: true, showInCard: true, showInForm: true },
-    { key: 'profesor',  label: 'Profesor',          type: 'text',   required: true,  showInTable: true, showInCard: true, showInForm: true },
-    { key: 'fecha',     label: 'Fecha',             type: 'date',   required: true,  showInTable: true, showInCard: true, showInForm: true, sortable: true, filterable: true },
-    { key: 'hora',      label: 'Hora',              type: 'time',   required: true,  showInTable: true, showInCard: true, showInForm: true },
-    { key: 'duracion',  label: 'Duración (min)',    type: 'number', required: true,  showInTable: true, showInForm: true },
-    { key: 'capacidad', label: 'Capacidad',         type: 'number', required: true,  showInTable: true, showInCard: true, showInForm: true },
-    { key: 'cupos',     label: 'Cupos disponibles', type: 'number', showInTable: true, showInCard: true },
-    { key: 'estado',    label: 'Estado',            type: 'badge',  showInTable: true, showInCard: true, filterable: true },
+    { key: 'id',          label: 'N° venta',       type: 'text',     required: true, showInTable: true, showInCard: true },
+    { key: 'cliente',     label: 'Cliente',         type: 'text',     required: true, showInTable: true, showInCard: true, sortable: true, filterable: true },
+    { key: 'montoTotal',  label: 'Monto total',     type: 'currency', showInTable: true },
+    { key: 'ventaFinal',  label: 'Venta final',     type: 'currency', showInTable: true, showInCard: true, showInForm: true },
+    { key: 'condPago',    label: 'Condición de pago', type: 'select', showInForm: true },
+    { key: 'vencCobro',   label: 'Vencimiento cobro', type: 'date',   showInForm: true },
+    { key: 'entregaCompr',label: 'Entrega comprometida', type: 'date', showInForm: true },
+    { key: 'entregaReal', label: 'Entrega real',    type: 'date',     showInForm: true },
+    { key: 'estadoOp',    label: 'Estado',           type: 'badge',   showInTable: true, showInCard: true, filterable: true },
   ] as EntityField[],
 
   statuses: [
-    { key: 'programada',  label: 'Programada',  color: 'text-blue-700',   bgColor: 'bg-blue-100' },
-    { key: 'en_curso',    label: 'En curso',    color: 'text-green-700',  bgColor: 'bg-green-100' },
-    { key: 'finalizada',  label: 'Finalizada',  color: 'text-gray-600',   bgColor: 'bg-gray-100' },
-    { key: 'cancelada',   label: 'Cancelada',   color: 'text-red-700',    bgColor: 'bg-red-100' },
+    { key: 'Pendiente',        label: 'Pendiente',        color: 'text-amber-700',   bgColor: 'bg-amber-100'  },
+    { key: 'Planificado',      label: 'Planificado',      color: 'text-purple-700',  bgColor: 'bg-purple-100' },
+    { key: 'En fabricación',   label: 'En fabricación',   color: 'text-blue-700',    bgColor: 'bg-blue-100'   },
+    { key: 'En montaje',       label: 'En montaje',       color: 'text-indigo-700',  bgColor: 'bg-indigo-100' },
+    { key: 'Entregado',        label: 'Entregado',        color: 'text-teal-700',    bgColor: 'bg-teal-100'   },
+    { key: 'Cerrado',          label: 'Cerrado',          color: 'text-gray-600',    bgColor: 'bg-gray-100'   },
   ] as EntityStatus[],
 
-  tableColumns: ['nombre', 'profesor', 'fecha', 'hora', 'capacidad', 'cupos', 'estado'],
-  cardFields:   ['profesor', 'hora', 'duracion', 'cupos'],
-  formFields:   ['nombre', 'profesor', 'fecha', 'hora', 'duracion', 'capacidad'],
+  tableColumns: ['id', 'cliente', 'ventaFinal', 'estadoOp'],
+  cardFields:   ['ventaFinal', 'condPago', 'vencCobro'],
+  formFields:   ['ventaFinal', 'condPago', 'vencCobro', 'entregaCompr', 'entregaReal'],
 } as const

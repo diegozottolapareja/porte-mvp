@@ -1,4 +1,16 @@
-// ─── Navegación por rol — ORIGEN Fitness ──────────────────────────────────────
+// ─── Navegación por rol — PORTE ───────────────────────────────────────────────
+// Los 8 módulos de negocio son un espejo 1:1 de las tabs del Excel: mismo
+// nombre, mismo orden, uno por uno. No fusionar (ej. "Movimientos" mezclando
+// Ingresos+Egresos) ni reordenar por criterio propio.
+//
+// 01_PRESUPUESTOS → Presupuestos   05_PROVEEDORES   → Proveedores
+// 02_VENTAS       → Ventas         06_GASTOS_FIJOS  → Gastos fijos
+// 03_INGRESOS     → Ingresos       07_VARIACIONES   → Variaciones
+// 04_EGRESOS      → Egresos        08_APRENDIZAJES  → Aprendizajes
+//
+// Cargar, Registros y Perfil no son módulos de negocio — son accesos, y van
+// agrupados aparte (nunca intercalados con los 8 de arriba). Dashboard y
+// Config son exclusivos de admin y también en su propio grupo.
 
 import { rolesConfig } from './rolesConfig'
 
@@ -10,43 +22,72 @@ export interface NavItem {
   moduleId: string
 }
 
-const navigationConfig: Record<string, NavItem[]> = {
-  superAdmin: [
-    { id: 'super-dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/super/dashboard', moduleId: 'dashboard' },
-    { id: 'tenants',         label: 'Tenants',   icon: 'Building2',       path: '/super/tenants',   moduleId: 'platform' },
-    { id: 'audit',           label: 'Auditoría', icon: 'ScrollText',      path: '/super/audit',     moduleId: 'platform' },
-    { id: 'super-settings',  label: 'Config',    icon: 'Settings',        path: '/super/settings',  moduleId: 'settings' },
-  ],
+export interface NavGroup {
+  id: string
+  label: string
+  items: NavItem[]
+}
 
-  admin: [
-    { id: 'admin-dashboard', label: 'Inicio',      icon: 'LayoutDashboard', path: '/admin/dashboard',     moduleId: 'dashboard' },
-    { id: 'schedule',        label: 'Agenda',       icon: 'CalendarDays',    path: '/schedule',            moduleId: 'schedule' },
-    { id: 'attendance',      label: 'Asistencias',  icon: 'ClipboardCheck',  path: '/attendance/review',   moduleId: 'attendance' },
-    { id: 'students',        label: 'Alumnos',      icon: 'Users',           path: '/students',            moduleId: 'entities' },
-    { id: 'admin-profile',   label: 'Perfil',       icon: 'User',            path: '/admin/profile',       moduleId: 'profile' },
-  ],
+// Los 8 módulos de negocio — fijos, mismo orden y nombre para todos los roles.
+const BUSINESS_MODULES: NavItem[] = [
+  { id: 'presupuestos', label: 'Presupuestos',  icon: 'FileText',        path: '/presupuestos',  moduleId: 'presupuestos' },
+  { id: 'ventas',       label: 'Ventas',         icon: 'Hammer',          path: '/ventas',        moduleId: 'ventas' },
+  { id: 'ingresos',     label: 'Ingresos',       icon: 'ArrowDownCircle', path: '/ingresos',      moduleId: 'ingresos' },
+  { id: 'egresos',      label: 'Egresos',        icon: 'ArrowUpCircle',  path: '/egresos',       moduleId: 'egresos' },
+  { id: 'proveedores',  label: 'Proveedores',    icon: 'Landmark',       path: '/proveedores',   moduleId: 'proveedores' },
+  { id: 'gastosfijos',  label: 'Gastos fijos',   icon: 'Wrench',         path: '/gastos-fijos',  moduleId: 'gastosfijos' },
+  { id: 'variaciones',  label: 'Variaciones',    icon: 'GitBranch',      path: '/variaciones',   moduleId: 'variaciones' },
+  { id: 'aprendizajes', label: 'Aprendizajes',   icon: 'Lightbulb',      path: '/aprendizajes',  moduleId: 'aprendizajes' },
+]
 
-  profesor: [
-    { id: 'dashboard',   label: 'Inicio',      icon: 'LayoutDashboard', path: '/dashboard',   moduleId: 'dashboard' },
-    { id: 'schedule',    label: 'Agenda',       icon: 'CalendarDays',    path: '/schedule',    moduleId: 'schedule' },
-    { id: 'attendance',  label: 'Asistencias',  icon: 'ClipboardCheck',  path: '/attendance',  moduleId: 'attendance' },
-    { id: 'profile',     label: 'Perfil',       icon: 'User',            path: '/profile',     moduleId: 'profile' },
-  ],
+// Punto de entrada principal — distinto por rol, no es un módulo de negocio.
+const MAIN_ITEMS: Record<string, NavItem[]> = {
+  admin:     [{ id: 'dashboard', label: 'Inicio',  icon: 'LayoutDashboard', path: '/dashboard', moduleId: 'dashboard' }],
+  dataEntry: [{ id: 'carga',     label: 'Cargar',  icon: 'PlusCircle',      path: '/carga',      moduleId: 'carga' }],
+}
 
-  manager: [
-    { id: 'manager-dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/manager/dashboard', moduleId: 'dashboard' },
-    { id: 'reports',           label: 'Reportes',  icon: 'BarChart2',       path: '/reports',           moduleId: 'reports' },
-    { id: 'schedule',          label: 'Agenda',    icon: 'CalendarDays',    path: '/schedule',          moduleId: 'schedule' },
-    { id: 'profile',           label: 'Perfil',    icon: 'User',            path: '/profile',           moduleId: 'profile' },
-  ],
+// Accesos — comunes a ambos roles, tampoco son módulos de negocio.
+const ACCESS_ITEMS: NavItem[] = [
+  { id: 'mis-registros', label: 'Registros', icon: 'List', path: '/mis-registros', moduleId: 'carga' },
+  { id: 'profile',       label: 'Perfil',    icon: 'User', path: '/profile',       moduleId: 'profile' },
+]
 
-  visitor: [
-    { id: 'schedule', label: 'Agenda', icon: 'CalendarDays', path: '/schedule', moduleId: 'schedule' },
-  ],
+// Exclusivo admin — separado, no intercalado con los 8 módulos.
+const ADMIN_ITEMS: NavItem[] = [
+  { id: 'config', label: 'Configuración', icon: 'Settings', path: '/config', moduleId: 'config' },
+]
+
+/** Grupos completos de navegación para un rol — usados por la sidebar de escritorio. */
+export function getNavGroups(role: string): NavGroup[] {
+  const groups: NavGroup[] = [
+    { id: 'main', label: '', items: MAIN_ITEMS[role] ?? [] },
+    { id: 'modules', label: 'Módulos', items: BUSINESS_MODULES },
+    { id: 'access', label: 'Accesos', items: ACCESS_ITEMS },
+  ]
+  if (role === 'admin') groups.push({ id: 'admin', label: 'Administración', items: ADMIN_ITEMS })
+  return groups
+}
+
+// Accesos priorizados por rol para el BottomNav móvil (máx. 4-5) — el resto
+// (incluidos los 8 módulos que no entran) se agrupa detrás de "Más".
+const MOBILE_PRIORITY: Record<string, string[]> = {
+  admin: ['dashboard', 'presupuestos', 'ventas', 'profile'],
+  dataEntry: ['carga', 'ventas', 'presupuestos', 'profile'],
+}
+
+function allItems(role: string): NavItem[] {
+  return getNavGroups(role).flatMap(g => g.items)
 }
 
 export function getNavItems(role: string): NavItem[] {
-  return navigationConfig[role] ?? []
+  const priority = MOBILE_PRIORITY[role] ?? []
+  const items = allItems(role)
+  return priority.map(id => items.find(i => i.id === id)).filter((i): i is NavItem => !!i)
+}
+
+/** Todos los módulos del rol, en orden de grupo — para la sidebar de escritorio y el menú "Más". */
+export function getDesktopNavItems(role: string): NavItem[] {
+  return allItems(role)
 }
 
 export function getDefaultRoute(role: string): string {
@@ -54,7 +95,5 @@ export function getDefaultRoute(role: string): string {
 }
 
 export function getNavItem(role: string, id: string): NavItem | undefined {
-  return navigationConfig[role]?.find(item => item.id === id)
+  return allItems(role).find(item => item.id === id)
 }
-
-export { navigationConfig }

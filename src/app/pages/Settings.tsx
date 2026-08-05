@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ArrowLeft, Bell, Lock, Smartphone, Globe, Palette, Trash2, ChevronRight, Moon, Sun, Info } from 'lucide-react'
+import { Bell, Lock, Smartphone, Globe, Palette, Trash2, ChevronRight, Moon, Sun, Info } from 'lucide-react'
 import { motion } from 'motion/react'
 import { toast } from 'sonner'
-import { AppHeader } from '@/components/AppHeader'
+import { AppShell } from '@/components/AppShell'
 import { useAuth } from '../contexts/AuthContext'
 import { appConfig } from '@/config/appConfig'
 
@@ -74,18 +74,8 @@ export default function Settings() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-8">
-      <AppHeader
-        variant="dark"
-        left={
-          <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-xl bg-white/20 hover:bg-white/30 transition-all flex items-center justify-center">
-            <ArrowLeft className="w-5 h-5 text-white" />
-          </button>
-        }
-        center={<h1 className="text-lg font-semibold text-white">Configuración</h1>}
-      />
-
-      <main className="max-w-2xl mx-auto p-4 space-y-4">
+    <AppShell title="Preferencias" onBack={() => navigate(-1)} narrow>
+      <div className="space-y-4">
         {/* Notifications */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white border border-border rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -182,7 +172,7 @@ export default function Settings() {
         >
           Cerrar sesión
         </motion.button>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

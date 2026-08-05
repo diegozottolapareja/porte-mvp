@@ -28,10 +28,7 @@ export function PrivateRoute({ children, allowedRoles }: PrivateRouteProps) {
   const path = location.pathname
   const defaultRoute = getDefaultRoute(user.role)
 
-  if (path.startsWith('/admin/') && user.role !== 'admin' && user.role !== 'superAdmin') {
-    return <Navigate to={defaultRoute} replace />
-  }
-  if (path.startsWith('/super/') && user.role !== 'superAdmin') {
+  if (path.startsWith('/admin/') && user.role !== 'admin') {
     return <Navigate to={defaultRoute} replace />
   }
   return <>{children}</>

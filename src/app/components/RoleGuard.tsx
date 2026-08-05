@@ -13,7 +13,7 @@ interface RoleGuardProps {
  * Use this to show/hide UI sections within a page (not for route protection — use PrivateRoute for that).
  *
  * @example
- * <RoleGuard roles={['admin', 'superAdmin']}>
+ * <RoleGuard roles={['admin']}>
  *   <DeleteButton />
  * </RoleGuard>
  */

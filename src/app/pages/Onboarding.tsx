@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'motion/react'
 import { ShoppingBag, BarChart2, Bell, CheckCircle, ChevronRight } from 'lucide-react'
 import { appConfig, type Role } from '@/config/appConfig'
 import { useAuth } from '../contexts/AuthContext'
+import { getDefaultRoute } from '@/config/navigationConfig'
 
 function defaultRoute(role?: Role): string {
-  if (role === 'admin' || role === 'superAdmin') return '/admin/dashboard'
-  return '/seller/sales'
+  return role ? getDefaultRoute(role) : '/'
 }
 
 const STEPS = [

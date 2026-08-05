@@ -1,15 +1,15 @@
 {
-  "name": "ORIGEN",
-  "short_name": "ORIGEN",
-  "description": "Gestión de clases, profesores y alumnos para tu gimnasio",
+  "name": "PORTE",
+  "short_name": "PORTE",
+  "description": "Gestión comercial y financiera de obras",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#1e1b4b",
-  "theme_color": "#4f46e5",
+  "background_color": "#1c2529",
+  "theme_color": "#37474f",
   "orientation": "portrait-primary",
   "lang": "es",
-  "categories": ["business", "health", "fitness"],
+  "categories": ["business", "productivity"],
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
@@ -18,7 +18,7 @@
     { "src": "/icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Agenda", "url": "/schedule", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Asistencias", "url": "/attendance", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Cargar", "url": "/carga", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Obras", "url": "/ventas", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

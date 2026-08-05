@@ -9,6 +9,7 @@ interface EntityListProps<T> {
   isLoading?: boolean
   emptyTitle?: string
   emptyDescription?: string
+  emptyAction?: { label: string; onClick: () => void }
   className?: string
   gap?: 'sm' | 'md' | 'lg'
 }
@@ -22,6 +23,7 @@ export function EntityList<T>({
   isLoading = false,
   emptyTitle = 'Sin resultados',
   emptyDescription = 'No hay elementos para mostrar.',
+  emptyAction,
   className = '',
   gap = 'md',
 }: EntityListProps<T>) {
@@ -34,7 +36,7 @@ export function EntityList<T>({
   }
 
   if (items.length === 0) {
-    return <EmptyState Icon={Inbox} title={emptyTitle} description={emptyDescription} />
+    return <EmptyState Icon={Inbox} title={emptyTitle} description={emptyDescription} action={emptyAction} />
   }
 
   return (

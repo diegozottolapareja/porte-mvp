@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { ArrowLeft, Bell, ShoppingBag, TrendingUp, User, CheckCheck, Trash2 } from 'lucide-react'
+import { Bell, Hammer, Wallet, AlertTriangle, CheckCheck, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
-import { AppHeader } from '@/components/AppHeader'
+import { AppShell } from '@/components/AppShell'
 import { EmptyState } from '@/components/EmptyState'
 
-type NotifType = 'order' | 'sale' | 'system' | 'user'
+type NotifType = 'obra' | 'cobro' | 'cheque' | 'sistema'
 
 interface Notification {
   id: string
@@ -17,23 +17,22 @@ interface Notification {
 }
 
 const ICON_MAP: Record<NotifType, typeof Bell> = {
-  order: ShoppingBag, sale: TrendingUp, system: Bell, user: User,
+  obra: Hammer, cobro: Wallet, cheque: AlertTriangle, sistema: Bell,
 }
 
 const COLOR_MAP: Record<NotifType, string> = {
-  order: 'text-blue-600 bg-blue-50',
-  sale:  'text-green-600 bg-green-50',
-  system:'text-orange-600 bg-orange-50',
-  user:  'text-purple-600 bg-purple-50',
+  obra:    'text-blue-600 bg-blue-50',
+  cobro:   'text-green-600 bg-green-50',
+  cheque:  'text-orange-600 bg-orange-50',
+  sistema: 'text-purple-600 bg-purple-50',
 }
 
 const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: 'n1', type: 'order',  title: 'Nuevo pedido recibido',       body: 'Hotel Los Álamos realizó un pedido por $98.400',       time: 'Hace 5 min',    read: false },
-  { id: 'n2', type: 'sale',   title: 'Meta de ventas alcanzada',    body: 'Superaste el 80% de tu meta mensual. ¡Seguí así!',     time: 'Hace 1 hora',   read: false },
-  { id: 'n3', type: 'system', title: 'Actualización disponible',    body: 'Hay una nueva versión de la app lista para instalar.',  time: 'Hace 3 horas',  read: true },
-  { id: 'n4', type: 'order',  title: 'Pedido entregado',            body: 'El pedido ORD-001 fue confirmado por Restaurante La Viña.', time: 'Ayer',      read: true },
-  { id: 'n5', type: 'user',   title: 'Nuevo vendedor agregado',     body: 'Lucas Pérez fue agregado al equipo como Vendedor.',    time: 'Hace 2 días',   read: true },
-  { id: 'n6', type: 'sale',   title: 'Informe semanal listo',       body: 'Tu resumen de ventas de la semana está disponible.',   time: 'Hace 3 días',   read: true },
+  { id: 'n1', type: 'cobro',   title: 'Anticipo cobrado',          body: 'Se registró un anticipo de $1.267.000 en PR - 0546 (VILCA JULIA)', time: 'Hace 5 min',    read: false },
+  { id: 'n2', type: 'cheque',  title: 'Cheque próximo a vencer',    body: 'El cheque de EG-0006 acredita el 15/08/2026 — $900.000',            time: 'Hace 1 hora',   read: false },
+  { id: 'n3', type: 'obra',    title: 'Presupuesto aceptado',       body: 'PR - 0552 (CASTRO ARIEL) pasó a estado Aceptado y generó la venta.', time: 'Hace 3 horas',  read: true },
+  { id: 'n4', type: 'obra',    title: 'Entrega comprometida próxima', body: 'PR - 0546 tiene entrega comprometida el 05/07/2026.',              time: 'Ayer',          read: true },
+  { id: 'n5', type: 'sistema', title: 'Actualización disponible',   body: 'Hay una nueva versión de la app lista para instalar.',              time: 'Hace 2 días',   read: true },
 ]
 
 export default function Notifications() {
@@ -47,32 +46,19 @@ export default function Notifications() {
   const remove      = (id: string) => setNotifs(prev => prev.filter(n => n.id !== id))
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader
-        variant="dark"
-        left={
-          <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-xl bg-white/20 hover:bg-white/30 transition-all flex items-center justify-center">
-            <ArrowLeft className="w-5 h-5 text-white" />
+    <AppShell
+      title={unreadCount > 0 ? `Notificaciones (${unreadCount})` : 'Notificaciones'}
+      onBack={() => navigate(-1)}
+      narrow
+      actions={
+        unreadCount > 0 ? (
+          <button onClick={markAllRead} className="w-10 h-10 rounded-xl bg-white/20 lg:bg-muted lg:w-9 lg:h-9 flex items-center justify-center" title="Marcar todo como leído">
+            <CheckCheck className="w-5 h-5 text-white lg:w-4 lg:h-4 lg:text-foreground" />
           </button>
-        }
-        center={
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold text-white">Notificaciones</h1>
-            {unreadCount > 0 && (
-              <span className="w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center font-bold">{unreadCount}</span>
-            )}
-          </div>
-        }
-        right={
-          unreadCount > 0 ? (
-            <button onClick={markAllRead} className="w-10 h-10 rounded-xl bg-white/20 hover:bg-white/30 transition-all flex items-center justify-center" title="Marcar todo como leído">
-              <CheckCheck className="w-5 h-5 text-white" />
-            </button>
-          ) : undefined
-        }
-      />
-
-      <main className="max-w-2xl mx-auto p-4">
+        ) : undefined
+      }
+    >
+      <div>
         {notifs.length === 0 ? (
           <EmptyState Icon={Bell} title="Sin notificaciones" description="Cuando haya novedades, aparecerán acá" />
         ) : (
@@ -114,7 +100,7 @@ export default function Notifications() {
             })}
           </AnimatePresence>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

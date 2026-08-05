@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { type Role } from '@/config/appConfig'
-import { hasPermission, type Permission } from '@/config/rolesConfig'
+import { hasPermission, rolesConfig, type Permission } from '@/config/rolesConfig'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,57 +35,23 @@ export interface LoginCredentials {
 // ─── Demo users — uno por rol ──────────────────────────────────────────────────
 
 const DEMO_USERS: Record<Role, AuthUser> = {
-  superAdmin: {
-    id: 'demo-superadmin',
-    name: 'Super Admin',
-    email: 'superadmin@demo.com',
-    role: 'superAdmin',
-    tenantId: '*',
-    permissions: ['*'],
-    avatarUrl: 'https://i.pravatar.cc/300?img=1',
-  },
   admin: {
     id: 'demo-admin',
-    name: 'Laura Sánchez',
-    email: 'admin@origen.com',
+    name: 'Gonza',
+    email: 'admin@porte.com',
     role: 'admin',
-    tenantId: 'origen-001',
-    permissions: [
-      'dashboard:view',
-      'schedule:view', 'schedule:manage',
-      'attendance:review', 'attendance:edit',
-      'entities:read', 'entities:write', 'entities:delete',
-      'users:read', 'users:manage',
-      'reports:view', 'reports:export',
-      'settings:read', 'settings:write',
-    ],
+    tenantId: 'porte-001',
+    permissions: ['*'],
     avatarUrl: 'https://i.pravatar.cc/300?img=45',
   },
-  profesor: {
-    id: 'demo-profesor',
-    name: 'Sofía Martínez',
-    email: 'sofia@origen.com',
-    role: 'profesor',
-    tenantId: 'origen-001',
-    permissions: ['dashboard:view', 'schedule:view', 'attendance:create', 'entities:read'],
-    avatarUrl: 'https://i.pravatar.cc/300?img=47',
-  },
-  manager: {
-    id: 'demo-manager',
-    name: 'Diego Herrera',
-    email: 'manager@origen.com',
-    role: 'manager',
-    tenantId: 'origen-001',
-    permissions: ['dashboard:view', 'schedule:view', 'entities:read', 'reports:view', 'reports:export'],
+  dataEntry: {
+    id: 'demo-dataentry',
+    name: 'Carga de datos',
+    email: 'carga@porte.com',
+    role: 'dataEntry',
+    tenantId: 'porte-001',
+    permissions: rolesConfig.dataEntry.permissions,
     avatarUrl: 'https://i.pravatar.cc/300?img=33',
-  },
-  visitor: {
-    id: 'demo-visitor',
-    name: 'Visitante',
-    email: '',
-    role: 'visitor',
-    tenantId: '',
-    permissions: ['schedule:view'],
   },
 }
 

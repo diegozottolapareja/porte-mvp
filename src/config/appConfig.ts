@@ -3,13 +3,13 @@
 
 export const appConfig = {
   // ── Branding ─────────────────────────────────────────────────────────────
-  APP_NAME: 'ORIGEN',
-  APP_TAGLINE: 'Gestión de clases, profesores y alumnos',
+  APP_NAME: 'PORTE',
+  APP_TAGLINE: 'Gestión comercial y financiera de ventas',
   LOGO_URL: '/logo.svg',
 
   // ── Entidad principal del negocio ────────────────────────────────────────
-  ENTITY_NAME_SINGULAR: 'Clase',
-  ENTITY_NAME_PLURAL: 'Clases',
+  ENTITY_NAME_SINGULAR: 'Venta',
+  ENTITY_NAME_PLURAL: 'Ventas',
 
   // ── Links externos ───────────────────────────────────────────────────────
   WHATSAPP_URL: 'https://wa.me/',
@@ -19,30 +19,23 @@ export const appConfig = {
 
   // ── Roles (labels visuales) ───────────────────────────────────────────────
   ROLES: {
-    superAdmin: 'Super Admin',
-    admin:      'Administrador',
-    profesor:   'Profesor',
-    manager:    'Manager',
-    visitor:    'Visitante',
+    admin:     'Administrador',
+    dataEntry: 'Carga de datos',
   } as const,
 
   // ── Demo mode ────────────────────────────────────────────────────────────
   DEMO_MODE: true,
 
   // ── BI Charts embebidos ───────────────────────────────────────────────────
-  BI_CHARTS: [
-    { id: 'occupancy-overview',  section: 'reports', name: 'Ocupación General',      url: '' },
-    { id: 'revenue-monthly',     section: 'reports', name: 'Facturación Mensual',    url: '' },
-    { id: 'top-professors',      section: 'reports', name: 'Ranking Profesores',     url: '' },
-  ] as const,
+  BI_CHARTS: [] as const,
 
   // ── Feature flags ────────────────────────────────────────────────────────
   FEATURES: {
     NOTIFICATIONS:       true,
     DARK_MODE:           true,
     PWA_INSTALL_PROMPT:  true,
-    BIOMETRIC_LOGIN:     true,
-    AI_CHAT:             false,   // no activo en fitness aún
+    BIOMETRIC_LOGIN:     false,
+    AI_CHAT:             false,
   },
 } as const
 

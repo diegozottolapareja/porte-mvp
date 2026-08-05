@@ -1,4 +1,4 @@
-// ─── Módulos de la aplicación — ORIGEN Fitness ────────────────────────────────
+// ─── Módulos de la aplicación — PORTE ─────────────────────────────────────────
 
 export interface ModuleConfig {
   id: string
@@ -9,15 +9,18 @@ export interface ModuleConfig {
 }
 
 export const modulesConfig: ModuleConfig[] = [
-  { id: 'dashboard',    label: 'Dashboard',      description: 'Panel principal con métricas del día',            enabled: true,  path: '/dashboard' },
-  { id: 'schedule',     label: 'Agenda',          description: 'Clases programadas y asignación de profesores',   enabled: true,  path: '/schedule' },
-  { id: 'attendance',   label: 'Asistencias',     description: 'Registro y revisión de asistencias',             enabled: true,  path: '/attendance' },
-  { id: 'entities',     label: 'Alumnos',         description: 'Gestión de alumnos y membresías',                enabled: true,  path: '/students' },
-  { id: 'users',        label: 'Usuarios',        description: 'Gestión de usuarios y roles del sistema',        enabled: true,  path: '/admin/users' },
-  { id: 'reports',      label: 'Reportes',        description: 'KPIs, ocupación, facturación y exportación',     enabled: true,  path: '/reports' },
-  { id: 'notifications',label: 'Notificaciones',  description: 'Centro de notificaciones del usuario',           enabled: true,  path: '/notifications' },
-  { id: 'profile',      label: 'Perfil',          description: 'Perfil del usuario autenticado',                 enabled: true,  path: '/profile' },
-  { id: 'settings',     label: 'Configuración',   description: 'Preferencias y configuración del sistema',       enabled: true,  path: '/settings' },
+  { id: 'dashboard',    label: 'Dashboard',     description: 'Panel con ventas activas y estado de cobros',         enabled: true, path: '/dashboard' },
+  { id: 'carga',        label: 'Carga rápida',  description: 'Carga rápida de ingresos, egresos y presupuestos',    enabled: true, path: '/carga' },
+  { id: 'presupuestos', label: 'Presupuestos',  description: 'Embudo comercial',                                    enabled: true, path: '/presupuestos' },
+  { id: 'ventas',       label: 'Ventas',        description: 'Ventas y ficha de venta',                             enabled: true, path: '/ventas' },
+  { id: 'ingresos',     label: 'Ingresos',      description: 'Cobros de clientes',                                  enabled: true, path: '/ingresos' },
+  { id: 'egresos',      label: 'Egresos',       description: 'Pagos a proveedores y gastos de venta',               enabled: true, path: '/egresos' },
+  { id: 'proveedores',  label: 'Proveedores',   description: 'Registro y cuenta corriente',                         enabled: true, path: '/proveedores' },
+  { id: 'gastosfijos',  label: 'Gastos fijos',  description: 'Estructura mensual prevista vs real',                 enabled: true, path: '/gastos-fijos' },
+  { id: 'variaciones',  label: 'Variaciones',   description: 'Cambios post-venta',                                  enabled: true, path: '/variaciones' },
+  { id: 'aprendizajes', label: 'Aprendizajes',  description: 'Retrospectivas de venta',                              enabled: true, path: '/aprendizajes' },
+  { id: 'config',       label: 'Configuración', description: 'Listas maestras',                                     enabled: true, path: '/config' },
+  { id: 'profile',      label: 'Perfil',        description: 'Perfil del usuario autenticado',                      enabled: true, path: '/profile' },
 ]
 
 export function getModule(id: string): ModuleConfig | undefined {

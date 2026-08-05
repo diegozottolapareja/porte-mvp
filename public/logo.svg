@@ -1,34 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80" fill="none">
-  <!-- Wheat spike left -->
-  <g transform="translate(12, 40)">
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#4caf50" transform="rotate(-20)"/>
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#66bb6a" transform="rotate(-20) translate(0,-2)" opacity="0.6"/>
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#4caf50" transform="rotate(20)"/>
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#66bb6a" transform="rotate(20) translate(0,-2)" opacity="0.6"/>
-    <ellipse cx="0" cy="-10" rx="5" ry="9" fill="#388e3c" transform="rotate(-15) translate(-2,8)"/>
-    <ellipse cx="0" cy="-10" rx="5" ry="9" fill="#388e3c" transform="rotate(15) translate(2,8)"/>
-    <line x1="0" y1="0" x2="0" y2="-32" stroke="#2e7d32" stroke-width="1.5" stroke-linecap="round"/>
-    <!-- Top grain -->
-    <ellipse cx="0" cy="-34" rx="4" ry="6" fill="#1b5e20"/>
-  </g>
-
-  <!-- Wheat spike right -->
-  <g transform="translate(34, 38)">
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#4caf50" transform="rotate(-20)"/>
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#66bb6a" transform="rotate(-20) translate(0,-2)" opacity="0.6"/>
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#4caf50" transform="rotate(20)"/>
-    <ellipse cx="0" cy="-18" rx="5" ry="9" fill="#66bb6a" transform="rotate(20) translate(0,-2)" opacity="0.6"/>
-    <ellipse cx="0" cy="-10" rx="5" ry="9" fill="#388e3c" transform="rotate(-15) translate(-2,8)"/>
-    <ellipse cx="0" cy="-10" rx="5" ry="9" fill="#388e3c" transform="rotate(15) translate(2,8)"/>
-    <line x1="0" y1="0" x2="0" y2="-32" stroke="#2e7d32" stroke-width="1.5" stroke-linecap="round"/>
-    <ellipse cx="0" cy="-34" rx="4" ry="6" fill="#1b5e20"/>
-  </g>
-
-  <!-- Trend arrow -->
-  <polyline points="52,52 64,38 76,44 88,28" stroke="#66bb6a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <polygon points="88,28 82,30 86,36" fill="#66bb6a"/>
-
-  <!-- Wordmark -->
-  <text x="100" y="52" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="700" fill="#ffffff" letter-spacing="-0.5">grain</text>
-  <text x="166" y="52" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-size="28" font-weight="300" fill="#66bb6a" letter-spacing="-0.5">flow</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#2e4459"/>
+  <text
+    x="50%"
+    y="53%"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif"
+    font-weight="800"
+    font-size="108"
+    letter-spacing="-2"
+    fill="#ffffff"
+  >porte</text>
 </svg>
