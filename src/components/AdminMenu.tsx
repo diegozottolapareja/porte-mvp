@@ -5,21 +5,18 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu'
 import { useAuth } from '@/app/contexts/AuthContext'
-import { getNavItems, getDesktopNavItems } from '@/config/navigationConfig'
+import { getDesktopNavItems } from '@/config/navigationConfig'
 import { NAV_ICONS } from './iconMap'
 
-// Menú "Más" para mobile — agrupa los módulos del rol que no entran en el
-// BottomNav (limitado a 5 items). Los items salen de navigationConfig, así que
-// sirve para cualquier rol: cada uno ve sus propios extras.
+// Menú "Más" para mobile — replica exactamente la sidebar de escritorio (todos
+// los ítems del rol, sin excluir los que también están en el BottomNav), para
+// que mobile y desktop muestren siempre las mismas opciones.
 export function AdminMenu() {
   const navigate = useNavigate()
   const { user } = useAuth()
   if (!user) return null
 
-  const mainIds = new Set(getNavItems(user.role).map(i => i.id))
-  const extraItems = getDesktopNavItems(user.role).filter(i => !mainIds.has(i.id) && i.id !== 'config')
-
-  if (extraItems.length === 0 && user.role !== 'admin') return null
+  const items = getDesktopNavItems(user.role).filter(i => i.id !== 'config')
 
   return (
     <DropdownMenu>
@@ -29,9 +26,9 @@ export function AdminMenu() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel>Más secciones</DropdownMenuLabel>
+        <DropdownMenuLabel>Secciones</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {extraItems.map(item => {
+        {items.map(item => {
           const Icon = NAV_ICONS[item.icon as keyof typeof NAV_ICONS] ?? Menu
           return (
             <DropdownMenuItem key={item.id} onClick={() => navigate(item.path)}>

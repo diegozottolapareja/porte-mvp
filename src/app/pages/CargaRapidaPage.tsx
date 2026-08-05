@@ -4,7 +4,6 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { motion } from 'motion/react'
 import { AppShell } from '@/components/AppShell'
-import { AdminMenu } from '@/components/AdminMenu'
 import { MetricCard } from '@/components/MetricCard'
 import { EmptyState } from '@/components/EmptyState'
 import { usePorteData } from '@/modules/porte/store'
@@ -61,7 +60,7 @@ export default function CargaRapidaPage() {
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10)
 
   return (
-    <AppShell title="Cargar" actions={<div className="lg:hidden"><AdminMenu /></div>}>
+    <AppShell title="Cargar">
       <div className="space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricCard label="Registros hoy" value={registrosHoy} />

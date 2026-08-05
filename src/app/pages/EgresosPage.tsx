@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router'
 import { Plus, Clock3 } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
-import { AdminMenu } from '@/components/AdminMenu'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
@@ -26,12 +25,9 @@ export default function EgresosPage() {
       title="Egresos"
       onBack={() => navigate(-1)}
       actions={
-        <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/egresos/nuevo')} className="w-10 h-10 rounded-xl bg-white/20 lg:bg-primary lg:text-white lg:w-9 lg:h-9 flex items-center justify-center">
-            <Plus className="w-5 h-5 text-white lg:w-4 lg:h-4" />
-          </button>
-          <div className="lg:hidden"><AdminMenu /></div>
-        </div>
+        <button onClick={() => navigate('/egresos/nuevo')} className="w-10 h-10 rounded-xl bg-white/20 lg:bg-primary lg:text-white lg:w-9 lg:h-9 flex items-center justify-center">
+          <Plus className="w-5 h-5 text-white lg:w-4 lg:h-4" />
+        </button>
       }
     >
       <div className="space-y-4">

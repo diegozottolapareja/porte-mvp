@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Plus } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
-import { AdminMenu } from '@/components/AdminMenu'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { PermissionGuard } from '../components/PermissionGuard'
@@ -25,14 +24,11 @@ export default function VentasPage() {
     <AppShell
       title="Ventas"
       actions={
-        <div className="flex items-center gap-2">
-          <PermissionGuard permission="ventas:write">
-            <button onClick={() => setShowNueva(true)} className="w-10 h-10 rounded-xl bg-white/20 lg:bg-primary lg:text-white lg:w-9 lg:h-9 flex items-center justify-center">
-              <Plus className="w-5 h-5 text-white lg:w-4 lg:h-4" />
-            </button>
-          </PermissionGuard>
-          <div className="lg:hidden"><AdminMenu /></div>
-        </div>
+        <PermissionGuard permission="ventas:write">
+          <button onClick={() => setShowNueva(true)} className="w-10 h-10 rounded-xl bg-white/20 lg:bg-primary lg:text-white lg:w-9 lg:h-9 flex items-center justify-center">
+            <Plus className="w-5 h-5 text-white lg:w-4 lg:h-4" />
+          </button>
+        </PermissionGuard>
       }
     >
       <div className="space-y-4">

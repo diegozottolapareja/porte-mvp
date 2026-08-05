@@ -6,6 +6,7 @@ import {
   SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarHeader, SidebarFooter, SidebarInset,
 } from '@/app/components/ui/sidebar'
 import { AppHeader } from './AppHeader'
+import { AdminMenu } from './AdminMenu'
 import { PorteNav } from './PorteNav'
 import { NAV_ICONS } from './iconMap'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -137,7 +138,12 @@ export function AppShell({ title, actions, detailPanel, onBack, narrow, children
                 <h1 className="text-xl text-white truncate">{title}</h1>
               </div>
             }
-            right={actions}
+            right={
+              <div className="flex items-center gap-2">
+                {actions}
+                <AdminMenu />
+              </div>
+            }
           />
         </div>
 

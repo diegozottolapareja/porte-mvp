@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router'
 import { Wallet, TrendingUp, Hammer, Clock } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
-import { AdminMenu } from '@/components/AdminMenu'
 import { MetricCard } from '@/components/MetricCard'
 import { EntityCard } from '@/components/EntityCard'
 import { EntityList } from '@/components/EntityList'
@@ -19,7 +18,7 @@ export default function DashboardPage() {
   const chequesPorVencer = egresos.filter(e => e.activo && e.estado === 'Emitido' && e.fechaAcreditacion).length
 
   return (
-    <AppShell title="Inicio" actions={<div className="lg:hidden"><AdminMenu /></div>}>
+    <AppShell title="Inicio">
       <div className="space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricCard label="Ventas activas" value={ventasActivas.length} Icon={Hammer} />
