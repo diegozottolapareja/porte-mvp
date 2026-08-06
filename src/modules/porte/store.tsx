@@ -1,16 +1,29 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import { MOCK_INGRESOS, type Ingreso } from './data/ingresos'
-import { MOCK_EGRESOS, type Egreso } from './data/egresos'
-import { MOCK_PRESUPUESTOS, type Presupuesto } from './data/presupuestos'
-import { MOCK_VENTAS, type Venta } from './data/ventas'
-import { MOCK_PROVEEDORES, type Proveedor } from './data/proveedores'
-import { MOCK_GASTOS_FIJOS, type GastoFijo } from './data/gastosFijos'
-import { MOCK_VARIACIONES, type Variacion } from './data/variaciones'
-import { MOCK_APRENDIZAJES, type Aprendizaje } from './data/aprendizajes'
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import type { Ingreso } from './data/ingresos'
+import type { Egreso } from './data/egresos'
+import type { Presupuesto } from './data/presupuestos'
+import type { Venta } from './data/ventas'
+import type { Proveedor } from './data/proveedores'
+import type { GastoFijo } from './data/gastosFijos'
+import type { Variacion } from './data/variaciones'
+import type { Aprendizaje } from './data/aprendizajes'
 import { procesarAceptacionPresupuesto } from './calculos'
+import {
+  rowToIngreso, ingresoToRow, rowToEgreso, egresoToRow, rowToPresupuesto, presupuestoToRow,
+  rowToVenta, ventaToRow, rowToProveedor, proveedorToRow, rowToGastoFijo, gastoFijoToRow,
+  rowToVariacion, variacionToRow, rowToAprendizaje, aprendizajeToRow,
+} from './mappers'
 
-// ─── Store en memoria para altas/ediciones/bajas en runtime ──────────────────
-// No hay backend todavía — esto simula la persistencia mientras se conecta la API real.
+// ─── Store conectado a Supabase ───────────────────────────────────────────────
+// Carga inicial desde las tablas reales. Las mutaciones actualizan el estado
+// local de inmediato (misma UX que antes) y persisten en Supabase en paralelo;
+// RLS es la barrera real de escritura, esto es solo la capa de UI.
+
+function logPersistError(op: string, error: unknown) {
+  // eslint-disable-next-line no-console
+  console.error(`[porte-store] ${op} falló al persistir en Supabase:`, error)
+}
 
 function nextRef(prefix: string, items: Array<{ ref?: string }>): string {
   const max = items.reduce((acc, i) => {
@@ -29,6 +42,7 @@ function nextSeqId(prefix: string, ids: string[]): string {
 }
 
 interface PorteDataContextType {
+  isLoading: boolean
   ingresos: Ingreso[]
   egresos: Egreso[]
   presupuestos: Presupuesto[]
@@ -61,8 +75,8 @@ interface PorteDataContextType {
   /**
    * Transición Presupuesto → Venta: crea la venta en el mismo acto en que el
    * presupuesto pasa a 'Aceptado'. Idempotente (no duplica si la venta ya existe).
-   * `overrides` permite pasar cambios de campos que se están guardando en el mismo
-   * submit (ej. desde el formulario completo) para validar contra los valores nuevos.
+   * Valida del lado del cliente para feedback inmediato — el trigger de la base
+   * (fn_aceptar_presupuesto) es la barrera real, no bypasseable desde el frontend.
    */
   aceptarPresupuesto: (
     id: string,
@@ -93,19 +107,50 @@ export function gastoFijoKey(g: Pick<GastoFijo, 'concepto' | 'fecha'>): string {
 }
 
 export function PorteDataProvider({ children }: { children: ReactNode }) {
-  const [ingresos, setIngresos] = useState<Ingreso[]>(MOCK_INGRESOS)
-  const [egresos, setEgresos] = useState<Egreso[]>(MOCK_EGRESOS)
-  const [presupuestos, setPresupuestos] = useState<Presupuesto[]>(MOCK_PRESUPUESTOS)
-  const [ventas, setVentas] = useState<Venta[]>(MOCK_VENTAS)
-  const [proveedores, setProveedores] = useState<Proveedor[]>(MOCK_PROVEEDORES)
-  const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>(MOCK_GASTOS_FIJOS)
-  const [variaciones, setVariaciones] = useState<Variacion[]>(MOCK_VARIACIONES)
-  const [aprendizajes, setAprendizajes] = useState<Aprendizaje[]>(MOCK_APRENDIZAJES)
+  const [isLoading, setIsLoading] = useState(true)
+  const [ingresos, setIngresos] = useState<Ingreso[]>([])
+  const [egresos, setEgresos] = useState<Egreso[]>([])
+  const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
+  const [ventas, setVentas] = useState<Venta[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
+  const [variaciones, setVariaciones] = useState<Variacion[]>([])
+  const [aprendizajes, setAprendizajes] = useState<Aprendizaje[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadAll() {
+      const [ing, egr, pre, ven, prov, gf, vcar, apr] = await Promise.all([
+        supabase.from('ingresos').select('*').order('created_at', { ascending: false }),
+        supabase.from('egresos').select('*').order('created_at', { ascending: false }),
+        supabase.from('presupuestos').select('*').order('created_at', { ascending: false }),
+        supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false }),
+        supabase.from('v_proveedores_saldo').select('*'),
+        supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false }),
+        supabase.from('variaciones').select('*').order('created_at', { ascending: false }),
+        supabase.from('aprendizajes').select('*').order('created_at', { ascending: false }),
+      ])
+      if (cancelled) return
+      if (ing.data) setIngresos(ing.data.map(rowToIngreso))
+      if (egr.data) setEgresos(egr.data.map(rowToEgreso))
+      if (pre.data) setPresupuestos(pre.data.map(rowToPresupuesto))
+      if (ven.data) setVentas(ven.data.map(rowToVenta))
+      if (prov.data) setProveedores(prov.data.map(rowToProveedor))
+      if (gf.data) setGastosFijos(gf.data.map(rowToGastoFijo))
+      if (vcar.data) setVariaciones(vcar.data.map(rowToVariacion))
+      if (apr.data) setAprendizajes(apr.data.map(rowToAprendizaje))
+      setIsLoading(false)
+    }
+    loadAll()
+    return () => { cancelled = true }
+  }, [])
 
   const addIngreso: PorteDataContextType['addIngreso'] = (data, userId) => {
     const now = new Date().toISOString()
     const nuevo: Ingreso = { ...data, ref: nextRef('IN', ingresos), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setIngresos(prev => [nuevo, ...prev])
+    supabase.from('ingresos').insert({ ...ingresoToRow(nuevo), ref: nuevo.ref, created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addIngreso', error) })
     return nuevo
   }
 
@@ -113,6 +158,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString()
     const nuevo: Egreso = { ...data, ref: nextRef('EG', egresos), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setEgresos(prev => [nuevo, ...prev])
+    supabase.from('egresos').insert({ ...egresoToRow(nuevo), ref: nuevo.ref, created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addEgreso', error) })
     return nuevo
   }
 
@@ -120,6 +167,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString()
     const nuevo: Presupuesto = { ...data, activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setPresupuestos(prev => [nuevo, ...prev])
+    supabase.from('presupuestos').insert({ ...presupuestoToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addPresupuesto', error) })
     return nuevo
   }
 
@@ -127,6 +176,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString()
     const nuevo: Venta = { ...data, createdAt: now, createdBy: userId, updatedAt: now }
     setVentas(prev => [nuevo, ...prev])
+    supabase.from('ventas').insert({ ...ventaToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addVenta', error) })
     return nuevo
   }
 
@@ -134,6 +185,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString()
     const nuevo: Proveedor = { ...data, idProv: nextSeqId('PROV', proveedores.map(p => p.idProv)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setProveedores(prev => [nuevo, ...prev])
+    supabase.from('proveedores').insert({ ...proveedorToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addProveedor', error) })
     return nuevo
   }
 
@@ -141,6 +194,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString()
     const nuevo: GastoFijo = { ...data, activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setGastosFijos(prev => [nuevo, ...prev])
+    supabase.from('gastos_fijos').insert({ ...gastoFijoToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addGastoFijo', error) })
     return nuevo
   }
 
@@ -148,6 +203,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString()
     const nuevo: Variacion = { ...data, idVar: nextSeqId('VAR', variaciones.map(v => v.idVar)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setVariaciones(prev => [nuevo, ...prev])
+    supabase.from('variaciones').insert({ ...variacionToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addVariacion', error) })
     return nuevo
   }
 
@@ -155,6 +212,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString()
     const nuevo: Aprendizaje = { ...data, idApr: nextSeqId('APR', aprendizajes.map(a => a.idApr)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setAprendizajes(prev => [nuevo, ...prev])
+    supabase.from('aprendizajes').insert({ ...aprendizajeToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addAprendizaje', error) })
     return nuevo
   }
 
@@ -168,8 +227,12 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     return `PR - ${String(max + 1).padStart(4, '0')}`
   }
 
-  const updatePresupuesto: PorteDataContextType['updatePresupuesto'] = (id, data) =>
-    setPresupuestos(prev => prev.map(p => p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p))
+  const updatePresupuesto: PorteDataContextType['updatePresupuesto'] = (id, data) => {
+    const now = new Date().toISOString()
+    setPresupuestos(prev => prev.map(p => p.id === id ? { ...p, ...data, updatedAt: now } : p))
+    supabase.from('presupuestos').update({ ...presupuestoToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updatePresupuesto', error) })
+  }
 
   const aceptarPresupuesto: PorteDataContextType['aceptarPresupuesto'] = (id, userId, overrides) => {
     const existente = presupuestos.find(p => p.id === id)
@@ -188,43 +251,80 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       setVentas(prev => [ventaCreada!, ...prev])
     }
 
+    // El update dispara fn_aceptar_presupuesto en la base, que crea la venta real
+    // (idempotente vía on conflict do nothing) — el insert local ya hecho arriba
+    // queda como espejo optimista, sin duplicar nada del lado del servidor.
+    supabase.from('presupuestos').update({ ...presupuestoToRow(overrides ?? {}), estado_comercial: 'Aceptado', updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('aceptarPresupuesto', error) })
+
     return { ok: true, venta: ventaCreada, duplicado: resultado.duplicado }
   }
 
-  const updateIngreso: PorteDataContextType['updateIngreso'] = (ref, data) =>
-    setIngresos(prev => prev.map(i => i.ref === ref ? { ...i, ...data, updatedAt: new Date().toISOString() } : i))
-  const updateEgreso: PorteDataContextType['updateEgreso'] = (ref, data) =>
-    setEgresos(prev => prev.map(e => e.ref === ref ? { ...e, ...data, updatedAt: new Date().toISOString() } : e))
+  const updateIngreso: PorteDataContextType['updateIngreso'] = (ref, data) => {
+    const now = new Date().toISOString()
+    setIngresos(prev => prev.map(i => i.ref === ref ? { ...i, ...data, updatedAt: now } : i))
+    supabase.from('ingresos').update({ ...ingresoToRow(data), updated_at: now }).eq('ref', ref)
+      .then(({ error }) => { if (error) logPersistError('updateIngreso', error) })
+  }
+  const updateEgreso: PorteDataContextType['updateEgreso'] = (ref, data) => {
+    const now = new Date().toISOString()
+    setEgresos(prev => prev.map(e => e.ref === ref ? { ...e, ...data, updatedAt: now } : e))
+    supabase.from('egresos').update({ ...egresoToRow(data), updated_at: now }).eq('ref', ref)
+      .then(({ error }) => { if (error) logPersistError('updateEgreso', error) })
+  }
 
-  const updateVenta: PorteDataContextType['updateVenta'] = (id, data) =>
-    setVentas(prev => prev.map(v => v.id === id ? { ...v, ...data, updatedAt: new Date().toISOString() } : v))
+  const updateVenta: PorteDataContextType['updateVenta'] = (id, data) => {
+    const now = new Date().toISOString()
+    setVentas(prev => prev.map(v => v.id === id ? { ...v, ...data, updatedAt: now } : v))
+    supabase.from('ventas').update({ ...ventaToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updateVenta', error) })
+  }
 
-  const updateProveedor: PorteDataContextType['updateProveedor'] = (idProv, data) =>
-    setProveedores(prev => prev.map(p => p.idProv === idProv ? { ...p, ...data, updatedAt: new Date().toISOString() } : p))
-  const updateGastoFijo: PorteDataContextType['updateGastoFijo'] = (key, data) =>
-    setGastosFijos(prev => prev.map(g => gastoFijoKey(g) === key ? { ...g, ...data, updatedAt: new Date().toISOString() } : g))
-  const updateVariacion: PorteDataContextType['updateVariacion'] = (idVar, data) =>
-    setVariaciones(prev => prev.map(v => v.idVar === idVar ? { ...v, ...data, updatedAt: new Date().toISOString() } : v))
-  const updateAprendizaje: PorteDataContextType['updateAprendizaje'] = (idApr, data) =>
-    setAprendizajes(prev => prev.map(a => a.idApr === idApr ? { ...a, ...data, updatedAt: new Date().toISOString() } : a))
+  const updateProveedor: PorteDataContextType['updateProveedor'] = (idProv, data) => {
+    const now = new Date().toISOString()
+    setProveedores(prev => prev.map(p => p.idProv === idProv ? { ...p, ...data, updatedAt: now } : p))
+    supabase.from('proveedores').update({ ...proveedorToRow(data), updated_at: now }).eq('id_prov', idProv)
+      .then(({ error }) => { if (error) logPersistError('updateProveedor', error) })
+  }
+  const updateGastoFijo: PorteDataContextType['updateGastoFijo'] = (key, data) => {
+    const now = new Date().toISOString()
+    const target = gastosFijos.find(g => gastoFijoKey(g) === key)
+    setGastosFijos(prev => prev.map(g => gastoFijoKey(g) === key ? { ...g, ...data, updatedAt: now } : g))
+    if (target) {
+      supabase.from('gastos_fijos').update({ ...gastoFijoToRow(data), updated_at: now })
+        .eq('concepto', target.concepto).eq('fecha', target.fecha)
+        .then(({ error }) => { if (error) logPersistError('updateGastoFijo', error) })
+    }
+  }
+  const updateVariacion: PorteDataContextType['updateVariacion'] = (idVar, data) => {
+    const now = new Date().toISOString()
+    setVariaciones(prev => prev.map(v => v.idVar === idVar ? { ...v, ...data, updatedAt: now } : v))
+    supabase.from('variaciones').update({ ...variacionToRow(data), updated_at: now }).eq('id_var', idVar)
+      .then(({ error }) => { if (error) logPersistError('updateVariacion', error) })
+  }
+  const updateAprendizaje: PorteDataContextType['updateAprendizaje'] = (idApr, data) => {
+    const now = new Date().toISOString()
+    setAprendizajes(prev => prev.map(a => a.idApr === idApr ? { ...a, ...data, updatedAt: now } : a))
+    supabase.from('aprendizajes').update({ ...aprendizajeToRow(data), updated_at: now }).eq('id_apr', idApr)
+      .then(({ error }) => { if (error) logPersistError('updateAprendizaje', error) })
+  }
 
-  const removeIngreso = (ref: string) => setIngresos(prev => prev.filter(i => i.ref !== ref))
-  const removeEgreso = (ref: string) => setEgresos(prev => prev.filter(e => e.ref !== ref))
+  const removeIngreso = (ref: string) => {
+    setIngresos(prev => prev.filter(i => i.ref !== ref))
+    supabase.from('ingresos').delete().eq('ref', ref).then(({ error }) => { if (error) logPersistError('removeIngreso', error) })
+  }
+  const removeEgreso = (ref: string) => {
+    setEgresos(prev => prev.filter(e => e.ref !== ref))
+    supabase.from('egresos').delete().eq('ref', ref).then(({ error }) => { if (error) logPersistError('removeEgreso', error) })
+  }
 
-  const softDeleteIngreso = (ref: string) =>
-    setIngresos(prev => prev.map(i => i.ref === ref ? { ...i, activo: false, updatedAt: new Date().toISOString() } : i))
-  const softDeleteEgreso = (ref: string) =>
-    setEgresos(prev => prev.map(e => e.ref === ref ? { ...e, activo: false, updatedAt: new Date().toISOString() } : e))
-  const softDeletePresupuesto = (id: string) =>
-    setPresupuestos(prev => prev.map(p => p.id === id ? { ...p, activo: false, updatedAt: new Date().toISOString() } : p))
-  const softDeleteProveedor = (idProv: string) =>
-    setProveedores(prev => prev.map(p => p.idProv === idProv ? { ...p, activo: false, updatedAt: new Date().toISOString() } : p))
-  const softDeleteGastoFijo = (key: string) =>
-    setGastosFijos(prev => prev.map(g => gastoFijoKey(g) === key ? { ...g, activo: false, updatedAt: new Date().toISOString() } : g))
-  const softDeleteVariacion = (idVar: string) =>
-    setVariaciones(prev => prev.map(v => v.idVar === idVar ? { ...v, activo: false, updatedAt: new Date().toISOString() } : v))
-  const softDeleteAprendizaje = (idApr: string) =>
-    setAprendizajes(prev => prev.map(a => a.idApr === idApr ? { ...a, activo: false, updatedAt: new Date().toISOString() } : a))
+  const softDeleteIngreso = (ref: string) => updateIngreso(ref, { activo: false })
+  const softDeleteEgreso = (ref: string) => updateEgreso(ref, { activo: false })
+  const softDeletePresupuesto = (id: string) => updatePresupuesto(id, { activo: false })
+  const softDeleteProveedor = (idProv: string) => updateProveedor(idProv, { activo: false })
+  const softDeleteGastoFijo = (key: string) => updateGastoFijo(key, { activo: false })
+  const softDeleteVariacion = (idVar: string) => updateVariacion(idVar, { activo: false })
+  const softDeleteAprendizaje = (idApr: string) => updateAprendizaje(idApr, { activo: false })
 
   const findDuplicateIngreso: PorteDataContextType['findDuplicateIngreso'] = (obraId, monto, fecha) =>
     ingresos.find(i => i.activo && i.id === obraId && i.monto === monto && i.fecha === fecha)
@@ -235,6 +335,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   return (
     <PorteDataContext.Provider
       value={{
+        isLoading,
         ingresos, egresos, presupuestos, ventas, proveedores, gastosFijos, variaciones, aprendizajes,
         addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addGastoFijo, addVariacion, addAprendizaje,
         updateIngreso, updateEgreso, updatePresupuesto, updateVenta, updateProveedor, updateGastoFijo, updateVariacion, updateAprendizaje,
