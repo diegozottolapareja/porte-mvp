@@ -7,6 +7,7 @@ import {
 } from '@/app/components/ui/sidebar'
 import { AppHeader } from './AppHeader'
 import { AdminMenu } from './AdminMenu'
+import { UserAvatar } from './UserAvatar'
 import { PorteNav } from './PorteNav'
 import { NAV_ICONS } from './iconMap'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -107,7 +108,7 @@ export function AppShell({ title, actions, detailPanel, onBack, narrow, children
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={() => navigate('/profile')} tooltip={user.name}>
-                  <img src={user.avatarUrl} alt={user.name} className="w-4 h-4 rounded-full shrink-0" />
+                  <UserAvatar src={user.avatarUrl} name={user.name} className="w-4 h-4 rounded-full shrink-0" iconClassName="w-2.5 h-2.5" />
                   <span className="truncate">{user.name}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>

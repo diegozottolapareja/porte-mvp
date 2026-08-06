@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router'
 import { AppShell } from '@/components/AppShell'
+import { UserAvatar } from '@/components/UserAvatar'
 import { useAuth } from '../contexts/AuthContext'
 import { Mail, LogOut, User as UserIcon, Shield } from 'lucide-react'
 import { motion } from 'motion/react'
@@ -25,7 +26,12 @@ export default function Profile() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-gradient-to-br from-primary to-accent rounded-3xl p-6 md:p-8 mb-6 text-white text-center"
         >
-          <img src={user.avatarUrl} alt={user.name} className="w-24 h-24 rounded-full border-4 border-white/20 mx-auto mb-4" />
+          <UserAvatar
+            src={user.avatarUrl}
+            name={user.name}
+            className="w-24 h-24 rounded-full border-4 border-white/20 mx-auto mb-4 bg-white/20 text-white"
+            iconClassName="w-12 h-12"
+          />
           <h2 className="text-2xl mb-1">{user.name}</h2>
           <p className="text-white/80">{appConfig.ROLES[user.role]}</p>
         </motion.div>
