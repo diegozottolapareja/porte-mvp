@@ -12,14 +12,21 @@ import ForgotPassword from './ForgotPassword'
 
 // ─── Real login: email + password + biometrics ────────────────────────────────
 
+// Credenciales de demo — se precargan al elegir el rol para que cualquiera
+// pueda entrar sin tener que buscar usuario/contraseña.
+const DEMO_CREDENTIALS: Record<Role, { email: string; password: string }> = {
+  admin: { email: 'admin@porte.com', password: 'Enfermo@1985' },
+  dataEntry: { email: 'carga@porte.com', password: 'Enfermo@1985' },
+}
+
 function RealLogin() {
   const { login, loginWithBiometrics } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState(DEMO_CREDENTIALS.admin.email)
+  const [password, setPassword] = useState(DEMO_CREDENTIALS.admin.password)
   const [role, setRole] = useState<Role>('admin')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -68,7 +75,11 @@ function RealLogin() {
             <button
               key={r}
               type="button"
-              onClick={() => setRole(r)}
+              onClick={() => {
+                setRole(r)
+                setEmail(DEMO_CREDENTIALS[r].email)
+                setPassword(DEMO_CREDENTIALS[r].password)
+              }}
               className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 role === r ? 'bg-white text-surface-dark shadow' : 'text-white/60 hover:text-white'
               }`}
