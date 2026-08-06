@@ -1,49 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router'
-import { ShieldCheck, ClipboardList, Eye, EyeOff, Fingerprint, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Fingerprint, AlertCircle } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { toast } from 'sonner'
 import { useAuth, isWebAuthnSupported, type LoginCredentials } from '../contexts/AuthContext'
 import { SplashScreen } from '@/components/SplashScreen'
-import { OptionCard } from '@/components/OptionCard'
 import { appConfig, type Role } from '@/config/appConfig'
 import { getDefaultRoute } from '@/config/navigationConfig'
 import logo from '/logo.svg'
 import ForgotPassword from './ForgotPassword'
-
-// ─── Demo mode: role selector ─────────────────────────────────────────────────
-
-function DemoLogin() {
-  const { loginAsDemo } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname
-
-  const handleSelect = (role: Role) => {
-    loginAsDemo(role)
-    navigate(from ?? getDefaultRoute(role))
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-center text-white/40 text-xs uppercase tracking-widest mb-6">Modo Demo — elegir rol</p>
-      <OptionCard
-        icon={<ShieldCheck className="w-7 h-7 text-white" />}
-        title={appConfig.ROLES.admin}
-        description="Panel de control, presupuestos, ventas y reportes"
-        onClick={() => handleSelect('admin')}
-        accentClass="from-blue-500/0 via-blue-500/10 to-blue-500/0 group-hover:via-blue-500/20"
-      />
-      <OptionCard
-        icon={<ClipboardList className="w-7 h-7 text-white" />}
-        title={appConfig.ROLES.dataEntry}
-        description="Carga rápida de ingresos, egresos y presupuestos"
-        onClick={() => handleSelect('dataEntry')}
-        accentClass="from-green-500/0 via-green-500/10 to-green-500/0 group-hover:via-green-500/20"
-      />
-    </div>
-  )
-}
 
 // ─── Real login: email + password + biometrics ────────────────────────────────
 
@@ -238,7 +203,7 @@ export default function Login() {
               <p className="text-white/50 text-sm tracking-wide">Bienvenido</p>
             </div>
 
-            {appConfig.DEMO_MODE ? <DemoLogin /> : <RealLogin />}
+            <RealLogin />
 
             <p className="text-center text-white/20 text-xs mt-10 tracking-wide">
               {appConfig.APP_NAME} · {appConfig.APP_TAGLINE}

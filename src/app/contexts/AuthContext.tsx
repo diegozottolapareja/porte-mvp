@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import { supabase } from '@/lib/supabaseClient'
 import { type Role } from '@/config/appConfig'
 import { hasPermission, rolesConfig, type Permission } from '@/config/rolesConfig'
 
@@ -22,8 +23,7 @@ interface AuthContextType {
   can: (permission: Permission) => boolean
   login: (credentials: LoginCredentials) => Promise<void>
   loginWithBiometrics: (role: Role) => Promise<void>
-  loginAsDemo: (role: Role) => void
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 export interface LoginCredentials {
@@ -32,48 +32,11 @@ export interface LoginCredentials {
   role: Role
 }
 
-// ─── Demo users — uno por rol ──────────────────────────────────────────────────
+// ─── Mapeo rol de base (snake_case) ↔ rol de frontend (camelCase) ─────────────
 
-const DEMO_USERS: Record<Role, AuthUser> = {
-  admin: {
-    id: 'demo-admin',
-    name: 'Gonza',
-    email: 'admin@porte.com',
-    role: 'admin',
-    tenantId: 'porte-001',
-    permissions: ['*'],
-    avatarUrl: 'https://i.pravatar.cc/300?img=45',
-  },
-  dataEntry: {
-    id: 'demo-dataentry',
-    name: 'Carga de datos',
-    email: 'carga@porte.com',
-    role: 'dataEntry',
-    tenantId: 'porte-001',
-    permissions: rolesConfig.dataEntry.permissions,
-    avatarUrl: 'https://i.pravatar.cc/300?img=33',
-  },
-}
-
-// ─── Session persistence ──────────────────────────────────────────────────────
-
-const SESSION_KEY = 'zantia_session'
-
-function saveSession(user: AuthUser) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(user))
-}
-
-function loadSession(): AuthUser | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    return raw ? (JSON.parse(raw) as AuthUser) : null
-  } catch {
-    return null
-  }
-}
-
-function clearSession() {
-  localStorage.removeItem(SESSION_KEY)
+const DB_ROLE_TO_APP_ROLE: Record<string, Role> = {
+  admin: 'admin',
+  data_entry: 'dataEntry',
 }
 
 // ─── WebAuthn helpers ─────────────────────────────────────────────────────────
@@ -82,38 +45,57 @@ export function isWebAuthnSupported(): boolean {
   return typeof window !== 'undefined' && !!window.PublicKeyCredential
 }
 
-async function webAuthnAuthenticate(_userId: string): Promise<boolean> {
-  // Scaffold — conectar a endpoints /auth/webauthn/* del backend real
-  try {
-    const challenge = crypto.getRandomValues(new Uint8Array(32))
-    const credential = await navigator.credentials.get({
-      publicKey: {
-        challenge,
-        rpId: window.location.hostname,
-        userVerification: 'required',
-        timeout: 60000,
-        allowCredentials: [],
-      },
-    })
-    return !!credential
-  } catch (err) {
-    console.warn('[WebAuthn]', err)
-    return false
-  }
-}
-
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+async function buildAuthUser(supabaseUser: { id: string; email?: string }): Promise<AuthUser> {
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('nombre, role, activo')
+    .eq('id', supabaseUser.id)
+    .single()
+
+  if (error || !profile || !profile.activo) {
+    throw new Error('Usuario sin perfil activo')
+  }
+
+  const role = DB_ROLE_TO_APP_ROLE[profile.role] ?? 'dataEntry'
+  return {
+    id: supabaseUser.id,
+    name: profile.nombre,
+    email: supabaseUser.email ?? '',
+    role,
+    tenantId: 'porte-001',
+    permissions: rolesConfig[role]?.permissions ?? [],
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const stored = loadSession()
-    if (stored) setUser(stored)
-    setIsLoading(false)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        try {
+          setUser(await buildAuthUser(session.user))
+        } catch {
+          setUser(null)
+        }
+      }
+      setIsLoading(false)
+    })
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        buildAuthUser(session.user).then(setUser).catch(() => setUser(null))
+      } else {
+        setUser(null)
+      }
+    })
+
+    return () => subscription.subscription.unsubscribe()
   }, [])
 
   // Verifica si el usuario actual tiene un permiso. Usar esto en lugar de comparar user.role.
@@ -122,36 +104,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return hasPermission(user.permissions, permission)
   }, [user])
 
-  const login = async ({ email, password: _password, role }: LoginCredentials) => {
-    // TODO: reemplazar con POST /auth/login { email, password, role }
-    // Esperar respuesta: { user: AuthUser, token: string }
-    await new Promise(r => setTimeout(r, 800))
-    const loggedIn: AuthUser = { ...DEMO_USERS[role], email }
-    setUser(loggedIn)
-    saveSession(loggedIn)
+  const login = async ({ email, password }: LoginCredentials) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error || !data.user) throw new Error('Email o contraseña incorrectos')
+    setUser(await buildAuthUser(data.user))
   }
 
-  const loginWithBiometrics = async (role: Role) => {
-    const demoUser = DEMO_USERS[role]
-    const ok = await webAuthnAuthenticate(demoUser.id)
-    if (!ok) throw new Error('Autenticación biométrica fallida o cancelada')
-    setUser(demoUser)
-    saveSession(demoUser)
+  const loginWithBiometrics = async (_role: Role) => {
+    // Scaffold — WebAuthn requiere un flujo de registro/verificación de credenciales
+    // contra el backend (Supabase no lo resuelve out-of-the-box); no implementado aún.
+    throw new Error('Login biométrico no disponible todavía')
   }
 
-  const loginAsDemo = (role: Role) => {
-    const demoUser = DEMO_USERS[role]
-    setUser(demoUser)
-    saveSession(demoUser)
-  }
-
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut()
     setUser(null)
-    clearSession()
   }
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, can, login, loginWithBiometrics, loginAsDemo, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, can, login, loginWithBiometrics, logout }}>
       {children}
     </AuthContext.Provider>
   )

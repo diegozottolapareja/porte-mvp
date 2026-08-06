@@ -24,7 +24,9 @@ export const appConfig = {
   } as const,
 
   // ── Demo mode ────────────────────────────────────────────────────────────
-  DEMO_MODE: true,
+  // false: login real contra Supabase Auth. El selector de rol en RealLogin
+  // queda como referencia visual — el rol real viene de profiles.role.
+  DEMO_MODE: false,
 
   // ── BI Charts embebidos ───────────────────────────────────────────────────
   BI_CHARTS: [] as const,
