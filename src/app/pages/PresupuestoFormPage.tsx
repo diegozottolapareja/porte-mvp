@@ -90,8 +90,8 @@ export default function PresupuestoFormPage() {
   }
 
   return (
-    <AppShell title={existing ? existing.id : 'Nuevo presupuesto'} onBack={() => navigate(-1)} narrow>
-      <div className="max-w-md mx-auto w-full space-y-4">
+    <AppShell title={existing ? existing.id : 'Nuevo presupuesto'} onBack={() => navigate(-1)}>
+      <div className="max-w-md mx-auto w-full space-y-4 lg:max-w-none lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
         <Field label="Cliente" required><input value={cliente} onChange={e => setCliente(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
         <Field label="Descripción"><input value={descripcion} onChange={e => setDescripcion(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
 
@@ -111,7 +111,7 @@ export default function PresupuestoFormPage() {
           </div>
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 lg:col-span-2 lg:grid-cols-3">
           <Field label="Costo materiales"><input type="number" value={costoMat} onChange={e => setCostoMat(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
           <Field label="Costo M.O."><input type="number" value={costoMo} onChange={e => setCostoMo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
           <Field label="Indirectos"><input type="number" value={indVendidos} onChange={e => setIndVendidos(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
@@ -120,12 +120,12 @@ export default function PresupuestoFormPage() {
           <Field label="Beneficio"><input type="number" value={beneficio} onChange={e => setBeneficio(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
         </div>
 
-        <div className="bg-primary/5 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-primary/5 rounded-2xl p-4 flex items-center justify-between lg:col-span-2">
           <p className="text-sm text-muted-foreground">Monto total (calculado)</p>
           <p className="text-lg font-semibold text-primary">{montoTotal !== undefined ? formatCurrency(montoTotal) : 'Sin cotizar'}</p>
         </div>
 
-        <Field label="Estado comercial">
+        <Field label="Estado comercial" className="lg:col-span-2">
           <div className="flex gap-2 flex-wrap">
             {CONFIG_LISTS.ESTADO_COMERCIAL.map(e => (
               <button key={e} onClick={() => setEstadoComercial(e)} className={`px-3 py-2 rounded-xl border text-xs ${estadoComercial === e ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{e}</button>
@@ -136,7 +136,7 @@ export default function PresupuestoFormPage() {
         <Field label="Vencimiento"><input type="date" value={vencimiento} onChange={e => setVencimiento(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
         <Field label="Observaciones"><textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={3} className="w-full px-4 py-3 rounded-2xl border border-border bg-white text-sm" /></Field>
 
-        <button onClick={handleSave} className="w-full py-4 bg-primary text-white rounded-2xl font-semibold text-sm">
+        <button onClick={handleSave} className="w-full py-4 bg-primary text-white rounded-2xl font-semibold text-sm lg:col-span-2">
           Guardar presupuesto
         </button>
       </div>
@@ -144,9 +144,9 @@ export default function PresupuestoFormPage() {
   )
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({ label, required, className = '', children }: { label: string; required?: boolean; className?: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className={className}>
       <label className="text-sm text-muted-foreground mb-1.5 block">{label}{required && <span className="text-destructive"> *</span>}</label>
       {children}
     </div>
