@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/app/contexts/AuthContext'
 import type { Ingreso } from './data/ingresos'
 import type { Egreso } from './data/egresos'
 import type { Presupuesto } from './data/presupuestos'
@@ -107,6 +108,7 @@ export function gastoFijoKey(g: Pick<GastoFijo, 'concepto' | 'fecha'>): string {
 }
 
 export function PorteDataProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
   const [ingresos, setIngresos] = useState<Ingreso[]>([])
   const [egresos, setEgresos] = useState<Egreso[]>([])
@@ -118,6 +120,13 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   const [aprendizajes, setAprendizajes] = useState<Aprendizaje[]>([])
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setIngresos([]); setEgresos([]); setPresupuestos([]); setVentas([])
+      setProveedores([]); setGastosFijos([]); setVariaciones([]); setAprendizajes([])
+      setIsLoading(true)
+      return
+    }
+
     let cancelled = false
     async function loadAll() {
       const [ing, egr, pre, ven, prov, gf, vcar, apr] = await Promise.all([
@@ -156,7 +165,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-  }, [])
+  }, [isAuthenticated])
 
   const addIngreso: PorteDataContextType['addIngreso'] = (data, userId) => {
     const now = new Date().toISOString()
