@@ -142,7 +142,20 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     }
     loadAll()
-    return () => { cancelled = true }
+
+    // Re-fetch al volver a la pestaña: el store solo carga una vez al montar,
+    // así que sin esto una sesión ya abierta no ve datos cargados por otro usuario.
+    function onVisible() {
+      if (document.visibilityState === 'visible') loadAll()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
   }, [])
 
   const addIngreso: PorteDataContextType['addIngreso'] = (data, userId) => {
