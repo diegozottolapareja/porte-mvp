@@ -8,14 +8,16 @@ import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { VariacionDialog } from '@/components/VariacionDialog'
 import { AprendizajeDialog } from '@/components/AprendizajeDialog'
+import { EstadoOperativoSelect } from '@/components/EstadoOperativoSelect'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs'
 import { Progress } from '@/app/components/ui/progress'
 import {
   ESTADO_OPERATIVO_CONFIG,
   getTotalCobrado, getSaldoPendiente, getCostoEstimado, getDesvioCosto,
-  type Variacion, type Aprendizaje,
+  type EstadoOperativo, type Variacion, type Aprendizaje,
 } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
+import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { ClipboardList } from 'lucide-react'
 
@@ -30,7 +32,8 @@ const CATEGORIAS_COSTO: Array<{ key: 'mater' | 'mo' | 'indVend' | 'imp' | 'comer
 export default function ObraDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { ventas, ingresos, egresos, variaciones, aprendizajes, softDeleteVariacion, softDeleteAprendizaje } = usePorteData()
+  const { can } = useAuth()
+  const { ventas, ingresos, egresos, variaciones, aprendizajes, updateVenta, softDeleteVariacion, softDeleteAprendizaje } = usePorteData()
   const venta = ventas.find(v => v.id === decodeURIComponent(id ?? ''))
   const [editingVariacion, setEditingVariacion] = useState<Variacion | 'nuevo' | null>(null)
   const [editingAprendizaje, setEditingAprendizaje] = useState<Aprendizaje | 'nuevo' | null>(null)
@@ -64,7 +67,14 @@ export default function ObraDetailPage() {
         <div className="bg-gradient-to-br from-primary to-accent rounded-3xl p-5 lg:p-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <p className="text-white/70 text-sm">{venta.cliente}</p>
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${estado.color} ${estado.bgColor}`}>{estado.label}</span>
+            {can('ventas:write') ? (
+              <EstadoOperativoSelect
+                value={venta.estadoOp}
+                onChange={value => updateVenta(venta.id, { estadoOp: value as EstadoOperativo })}
+              />
+            ) : (
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${estado.color} ${estado.bgColor}`}>{estado.label}</span>
+            )}
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div>

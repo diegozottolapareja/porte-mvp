@@ -4,13 +4,13 @@ import { Plus } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
+import { EstadoOperativoSelect } from '@/components/EstadoOperativoSelect'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { VentaDialog } from '@/components/VentaDialog'
 import { ESTADO_OPERATIVO_CONFIG, CONFIG_LISTS, getTotalCobrado, type EstadoOperativo } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '@/lib/format'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select'
 
 export default function VentasPage() {
   const navigate = useNavigate()
@@ -20,6 +20,7 @@ export default function VentasPage() {
   const [showNueva, setShowNueva] = useState(false)
 
   const ventasFiltradas = ventas.filter(v => estadoFilter === 'all' || v.estadoOp === estadoFilter)
+  const puedeEditar = can('ventas:write')
 
   return (
     <AppShell
@@ -50,31 +51,25 @@ export default function VentasPage() {
             <EntityCard
               title={venta.id}
               subtitle={venta.cliente}
-              status={ESTADO_OPERATIVO_CONFIG[venta.estadoOp]}
+              statusNode={
+                puedeEditar ? (
+                  <div onClick={e => e.stopPropagation()}>
+                    <EstadoOperativoSelect
+                      value={venta.estadoOp}
+                      onChange={value => updateVenta(venta.id, { estadoOp: value as EstadoOperativo })}
+                    />
+                  </div>
+                ) : (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_OPERATIVO_CONFIG[venta.estadoOp].color} ${ESTADO_OPERATIVO_CONFIG[venta.estadoOp].bgColor}`}>
+                    {ESTADO_OPERATIVO_CONFIG[venta.estadoOp].label}
+                  </span>
+                )
+              }
               onClick={() => navigate(`/ventas/${encodeURIComponent(venta.id)}`)}
               fields={[
                 { label: 'Venta final', value: formatCurrency(venta.ventaFinal), highlight: true },
                 { label: 'Cobrado', value: formatCurrency(getTotalCobrado(venta.id, ingresos)) },
               ]}
-              actions={
-                can('ventas:write') ? (
-                  <div className="w-full" onClick={e => e.stopPropagation()}>
-                    <Select
-                      value={venta.estadoOp}
-                      onValueChange={value => updateVenta(venta.id, { estadoOp: value as EstadoOperativo })}
-                    >
-                      <SelectTrigger size="sm" className="w-full bg-white">
-                        <SelectValue placeholder="Estado operativo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONFIG_LISTS.ESTADO_OPERATIVO.map(e => (
-                          <SelectItem key={e} value={e}>{ESTADO_OPERATIVO_CONFIG[e].label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : undefined
-              }
             />
           )}
         />

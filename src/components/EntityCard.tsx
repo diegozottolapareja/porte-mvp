@@ -14,12 +14,13 @@ interface EntityCardProps {
   fields?: EntityCardField[]
   badge?: { value: number; emptyLabel?: string }
   status?: { label: string; color: string; bgColor: string }
+  statusNode?: React.ReactNode
   onClick?: () => void
   actions?: React.ReactNode
   className?: string
 }
 
-export function EntityCard({ title, subtitle, fields, badge, status, onClick, actions, className = '' }: EntityCardProps) {
+export function EntityCard({ title, subtitle, fields, badge, status, statusNode, onClick, actions, className = '' }: EntityCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -34,11 +35,11 @@ export function EntityCard({ title, subtitle, fields, badge, status, onClick, ac
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5">
               <h3 className="font-semibold text-gray-900 truncate">{title}</h3>
-              {status && (
+              {statusNode ?? (status && (
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.color} ${status.bgColor}`}>
                   {status.label}
                 </span>
-              )}
+              ))}
             </div>
             {subtitle && <p className="text-sm text-muted-foreground truncate">{subtitle}</p>}
           </div>
