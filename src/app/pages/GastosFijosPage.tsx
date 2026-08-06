@@ -8,15 +8,16 @@ import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/app/components/ui/dialog'
 import { Button } from '@/app/components/ui/button'
+import { PillSelect } from '@/components/PillSelect'
 import { calcDiferencia, CONFIG_LISTS, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja } from '@/modules/porte'
 import { usePorteData, gastoFijoKey } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 
-const ESTADO_STYLE: Record<string, string> = {
-  PAGADO: 'bg-green-100 text-green-700',
-  PREVISTO: 'bg-amber-100 text-amber-700',
-  VENCIDO: 'bg-red-100 text-red-700',
+const ESTADO_STYLE: Record<EstadoGastoFijo, { label: string; color: string; bgColor: string }> = {
+  PAGADO: { label: 'PAGADO', color: 'text-green-700', bgColor: 'bg-green-100' },
+  PREVISTO: { label: 'PREVISTO', color: 'text-amber-700', bgColor: 'bg-amber-100' },
+  VENCIDO: { label: 'VENCIDO', color: 'text-red-700', bgColor: 'bg-red-100' },
 }
 
 const PERIODICIDADES: Periodicidad[] = ['Mensual', 'Bimestral', 'Trimestral', 'Anual', 'Único']
@@ -25,9 +26,10 @@ const ESTADOS: EstadoGastoFijo[] = ['PREVISTO', 'PAGADO', 'VENCIDO']
 export default function GastosFijosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { gastosFijos, softDeleteGastoFijo } = usePorteData()
+  const { gastosFijos, updateGastoFijo, softDeleteGastoFijo } = usePorteData()
   const [editing, setEditing] = useState<GastoFijo | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<GastoFijo | null>(null)
+  const puedeEditar = can('gastosfijos:write')
 
   const activos = gastosFijos.filter(g => g.activo)
 
@@ -57,7 +59,16 @@ export default function GastosFijosPage() {
                   <p className="font-medium text-sm">{g.concepto}</p>
                   <p className="text-xs text-muted-foreground">{g.categoria} · {g.periodicidad} · {formatDate(g.fecha)}</p>
                 </div>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado]}`}>{g.estado}</span>
+                {puedeEditar ? (
+                  <PillSelect
+                    value={g.estado}
+                    options={ESTADOS}
+                    style={v => ESTADO_STYLE[v]}
+                    onChange={estado => updateGastoFijo(gastoFijoKey(g), { estado })}
+                  />
+                ) : (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm mb-3">
                 <div><p className="text-[11px] text-muted-foreground uppercase">Previsto</p><p className="font-medium">{formatCurrency(g.montoPrevisto)}</p></div>

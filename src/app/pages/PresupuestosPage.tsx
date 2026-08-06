@@ -5,19 +5,21 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
+import { PillSelect } from '@/components/PillSelect'
 import { PermissionGuard } from '../components/PermissionGuard'
-import { ESTADO_COMERCIAL_CONFIG, CONFIG_LISTS, type Presupuesto } from '@/modules/porte'
+import { ESTADO_COMERCIAL_CONFIG, CONFIG_LISTS, type EstadoComercial, type Presupuesto } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 
 export default function PresupuestosPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
-  const { presupuestos: allPresupuestos, aceptarPresupuesto } = usePorteData()
+  const { user, can } = useAuth()
+  const { presupuestos: allPresupuestos, aceptarPresupuesto, updatePresupuesto } = usePorteData()
   const [query, setQuery] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string>('all')
   const [categoriaFilter, setCategoriaFilter] = useState<string>('all')
+  const puedeEditar = can('presupuestos:write')
 
   const handleAceptar = (p: Presupuesto) => {
     if (!user) return
@@ -29,6 +31,14 @@ export default function PresupuestosPage() {
     toast.success(`Presupuesto ${p.id} aceptado — venta creada`, {
       action: { label: 'Ver venta', onClick: () => navigate(`/ventas/${encodeURIComponent(p.id)}`) },
     })
+  }
+
+  const handleEstadoChange = (p: Presupuesto, estado: EstadoComercial) => {
+    if (estado === 'Aceptado') {
+      handleAceptar(p)
+      return
+    }
+    updatePresupuesto(p.id, { estadoComercial: estado })
   }
 
   const presupuestos = allPresupuestos
@@ -88,24 +98,27 @@ export default function PresupuestosPage() {
             <EntityCard
               title={p.id}
               subtitle={`${p.cliente} · ${p.descripcion}`}
-              status={{ label: p.estadoComercial, ...ESTADO_COMERCIAL_CONFIG[p.estadoComercial] }}
+              statusNode={
+                puedeEditar ? (
+                  <div onClick={e => e.stopPropagation()}>
+                    <PillSelect
+                      value={p.estadoComercial}
+                      options={CONFIG_LISTS.ESTADO_COMERCIAL}
+                      style={v => ({ label: v, ...ESTADO_COMERCIAL_CONFIG[v] })}
+                      onChange={estado => handleEstadoChange(p, estado)}
+                    />
+                  </div>
+                ) : (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_COMERCIAL_CONFIG[p.estadoComercial].color} ${ESTADO_COMERCIAL_CONFIG[p.estadoComercial].bgColor}`}>
+                    {p.estadoComercial}
+                  </span>
+                )
+              }
               onClick={() => navigate(`/presupuestos/${encodeURIComponent(p.id)}`)}
               fields={[
                 { label: 'Monto', value: formatCurrency(p.montoTotal), highlight: true },
                 { label: 'Fecha', value: formatDate(p.fecha) },
               ]}
-              actions={
-                p.estadoComercial !== 'Aceptado' && (
-                  <PermissionGuard permission="presupuestos:write">
-                    <button
-                      onClick={e => { e.stopPropagation(); handleAceptar(p) }}
-                      className="text-sm font-medium text-primary"
-                    >
-                      Marcar como Aceptado
-                    </button>
-                  </PermissionGuard>
-                )
-              }
             />
           )}
         />

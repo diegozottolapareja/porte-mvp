@@ -4,13 +4,24 @@ import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
+import { PillSelect } from '@/components/PillSelect'
 import { usePorteData } from '@/modules/porte/store'
+import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
+import type { EstadoIngreso } from '@/modules/porte'
+
+const ESTADO_INGRESO_STYLE: Record<EstadoIngreso, { label: string; color: string; bgColor: string }> = {
+  Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
+  Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
+}
+const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 
 export default function IngresosPage() {
   const navigate = useNavigate()
-  const { ingresos } = usePorteData()
+  const { can } = useAuth()
+  const { ingresos, updateIngreso } = usePorteData()
   const activos = ingresos.filter(i => i.activo)
+  const puedeEditar = can('ingresos:write')
 
   const totalPeriodo = activos
     .filter(i => i.estado === 'Confirmado')
@@ -43,9 +54,20 @@ export default function IngresosPage() {
             <EntityCard
               title={ingreso.concepto}
               subtitle={`${ingreso.id} · ${formatDate(ingreso.fecha)}`}
-              status={ingreso.estado === 'Confirmado'
-                ? { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' }
-                : { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' }}
+              statusNode={
+                puedeEditar ? (
+                  <PillSelect
+                    value={ingreso.estado}
+                    options={ESTADOS_INGRESO}
+                    style={v => ESTADO_INGRESO_STYLE[v]}
+                    onChange={estado => updateIngreso(ingreso.ref, { estado })}
+                  />
+                ) : (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_INGRESO_STYLE[ingreso.estado].color} ${ESTADO_INGRESO_STYLE[ingreso.estado].bgColor}`}>
+                    {ESTADO_INGRESO_STYLE[ingreso.estado].label}
+                  </span>
+                )
+              }
               fields={[
                 { label: 'Monto', value: formatCurrency(ingreso.monto), highlight: true },
                 { label: 'Cuenta', value: ingreso.cuenta },

@@ -4,19 +4,25 @@ import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
+import { PillSelect } from '@/components/PillSelect'
 import { usePorteData } from '@/modules/porte/store'
+import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
+import type { EstadoEgreso } from '@/modules/porte'
 
-const ESTADO_STYLE = {
+const ESTADO_STYLE: Record<EstadoEgreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
   Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
   Emitido: { label: 'Cheque emitido', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
 }
+const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 
 export default function EgresosPage() {
   const navigate = useNavigate()
-  const { egresos } = usePorteData()
+  const { can } = useAuth()
+  const { egresos, updateEgreso } = usePorteData()
   const activos = egresos.filter(e => e.activo)
+  const puedeEditar = can('egresos:write')
 
   const chequesFuturos = activos.filter(e => e.estado === 'Emitido' && e.fechaAcreditacion)
 
@@ -53,7 +59,20 @@ export default function EgresosPage() {
             <EntityCard
               title={egreso.tipoEgreso}
               subtitle={`${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
-              status={ESTADO_STYLE[egreso.estado]}
+              statusNode={
+                puedeEditar ? (
+                  <PillSelect
+                    value={egreso.estado}
+                    options={ESTADOS_EGRESO}
+                    style={v => ESTADO_STYLE[v]}
+                    onChange={estado => updateEgreso(egreso.ref, { estado })}
+                  />
+                ) : (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
+                    {ESTADO_STYLE[egreso.estado].label}
+                  </span>
+                )
+              }
               fields={[
                 { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true },
                 { label: 'Cuenta', value: egreso.cuenta },
