@@ -5,7 +5,8 @@ import { AppShell } from '@/components/AppShell'
 import { CONFIG_LISTS, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, todayLocal } from '@/lib/format'
+import { isNegativeAmount } from '@/lib/validation'
 
 export default function PresupuestoFormPage() {
   const navigate = useNavigate()
@@ -36,6 +37,20 @@ export default function PresupuestoFormPage() {
   const handleSave = () => {
     if (!cliente || !user) {
       toast.error('Completá el cliente')
+      return
+    }
+
+    const costoFields: Array<[string, string]> = [
+      ['Costo materiales', costoMat], ['Costo M.O.', costoMo], ['Indirectos', indVendidos],
+      ['Impuestos', impuestos], ['Comercial', comercial], ['Beneficio', beneficio],
+    ]
+    const costoNegativo = costoFields.find(([, v]) => isNegativeAmount(v))
+    if (costoNegativo) {
+      toast.error(`${costoNegativo[0]} no puede ser negativo`)
+      return
+    }
+    if (montoTotal !== undefined && montoTotal <= 0) {
+      toast.error('El monto total debe ser mayor a cero')
       return
     }
 
@@ -81,7 +96,7 @@ export default function PresupuestoFormPage() {
       toast.success('Presupuesto actualizado')
     } else {
       const nuevoId = nextPresupuestoId()
-      addPresupuesto({ id: nuevoId, fecha: new Date().toISOString().slice(0, 10), ...payload }, user.id)
+      addPresupuesto({ id: nuevoId, fecha: todayLocal(), ...payload }, user.id)
       // TODO: reemplazar con api.post('/presupuestos', { id: nuevoId, ...payload })
       toast.success(`Presupuesto ${nuevoId} creado`)
     }
@@ -112,12 +127,12 @@ export default function PresupuestoFormPage() {
         </Field>
 
         <div className="grid grid-cols-2 gap-3 lg:col-span-2 lg:grid-cols-3">
-          <Field label="Costo materiales"><input type="number" value={costoMat} onChange={e => setCostoMat(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
-          <Field label="Costo M.O."><input type="number" value={costoMo} onChange={e => setCostoMo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
-          <Field label="Indirectos"><input type="number" value={indVendidos} onChange={e => setIndVendidos(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
-          <Field label="Impuestos"><input type="number" value={impuestos} onChange={e => setImpuestos(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
-          <Field label="Comercial"><input type="number" value={comercial} onChange={e => setComercial(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
-          <Field label="Beneficio"><input type="number" value={beneficio} onChange={e => setBeneficio(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Costo materiales"><input type="number" min="0" value={costoMat} onChange={e => setCostoMat(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Costo M.O."><input type="number" min="0" value={costoMo} onChange={e => setCostoMo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Indirectos"><input type="number" min="0" value={indVendidos} onChange={e => setIndVendidos(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Impuestos"><input type="number" min="0" value={impuestos} onChange={e => setImpuestos(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Comercial"><input type="number" min="0" value={comercial} onChange={e => setComercial(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Beneficio"><input type="number" min="0" value={beneficio} onChange={e => setBeneficio(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
         </div>
 
         <div className="bg-primary/5 rounded-2xl p-4 flex items-center justify-between lg:col-span-2">

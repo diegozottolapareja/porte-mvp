@@ -223,12 +223,14 @@ export default function ObraDetailPage() {
       </div>
 
       <VariacionDialog
+        key={editingVariacion === null ? 'closed' : editingVariacion === 'nuevo' ? 'nuevo' : editingVariacion.idVar}
         open={editingVariacion !== null}
         onClose={() => setEditingVariacion(null)}
         editing={editingVariacion && editingVariacion !== 'nuevo' ? editingVariacion : undefined}
         fixedObra={{ idPres: venta.id.replace(' ', ''), cliente: venta.cliente }}
       />
       <AprendizajeDialog
+        key={editingAprendizaje === null ? 'closed' : editingAprendizaje === 'nuevo' ? 'nuevo' : editingAprendizaje.idApr}
         open={editingAprendizaje !== null}
         onClose={() => setEditingAprendizaje(null)}
         editing={editingAprendizaje && editingAprendizaje !== 'nuevo' ? editingAprendizaje : undefined}

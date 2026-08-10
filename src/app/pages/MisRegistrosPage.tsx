@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs'
 import { gastoFijoKey, usePorteData } from '@/modules/porte/store'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate, localDateString } from '@/lib/format'
 
 type Tab = 'todos' | 'ingresos' | 'egresos' | 'presupuestos' | 'proveedores' | 'gastosfijos' | 'variaciones' | 'aprendizajes'
 
@@ -43,7 +43,7 @@ const TABS: Array<{ value: Tab; label: string }> = [
 function daysAgo(n: number): string {
   const d = new Date()
   d.setDate(d.getDate() - n)
-  return d.toISOString().slice(0, 10)
+  return localDateString(d)
 }
 
 export default function MisRegistrosPage() {

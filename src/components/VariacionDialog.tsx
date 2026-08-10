@@ -6,6 +6,7 @@ import { SearchableSelect } from './SearchableSelect'
 import { CONFIG_LISTS, type Variacion, type TipoVariacion } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { todayLocal } from '@/lib/format'
 
 interface VariacionDialogProps {
   open: boolean
@@ -43,7 +44,7 @@ export function VariacionDialog({ open, onClose, editing, fixedObra }: Variacion
     const payload = {
       idPres: targetObraId, cliente, tipoVar, descripcion, valorAnterior, valorNuevo,
       impacto: Number(impacto) || 0, canal, registradoPor: user.name,
-      fecha: editing?.fecha ?? new Date().toISOString().slice(0, 10),
+      fecha: editing?.fecha ?? todayLocal(),
     }
 
     if (editing) {

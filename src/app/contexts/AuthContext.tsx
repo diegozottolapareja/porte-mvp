@@ -21,8 +21,8 @@ interface AuthContextType {
   isLoading: boolean
   /** Verifica si el usuario tiene un permiso específico. Preferir sobre chequear user.role. */
   can: (permission: Permission) => boolean
-  login: (credentials: LoginCredentials) => Promise<void>
-  loginWithBiometrics: (role: Role) => Promise<void>
+  login: (credentials: LoginCredentials) => Promise<AuthUser>
+  loginWithBiometrics: (role: Role) => Promise<AuthUser>
   logout: () => Promise<void>
 }
 
@@ -107,10 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async ({ email, password }: LoginCredentials) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.user) throw new Error('Email o contraseña incorrectos')
-    setUser(await buildAuthUser(data.user))
+    const authUser = await buildAuthUser(data.user)
+    setUser(authUser)
+    return authUser
   }
 
-  const loginWithBiometrics = async (_role: Role) => {
+  const loginWithBiometrics = async (_role: Role): Promise<AuthUser> => {
     // Scaffold — WebAuthn requiere un flujo de registro/verificación de credenciales
     // contra el backend (Supabase no lo resuelve out-of-the-box); no implementado aún.
     throw new Error('Login biométrico no disponible todavía')

@@ -7,7 +7,8 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { CONFIG_LISTS, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
+import { toPositiveAmount } from '@/lib/validation'
 
 export default function IngresoFormPage() {
   const navigate = useNavigate()
@@ -17,7 +18,7 @@ export default function IngresoFormPage() {
   const editRef = searchParams.get('ref')
   const editing = editRef ? ingresos.find(i => i.ref === editRef) : undefined
 
-  const [fecha, setFecha] = useState(editing?.fecha ?? new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(editing?.fecha ?? todayLocal())
   const [obraId, setObraId] = useState(editing?.id ?? '')
   const [tipoIngreso, setTipoIngreso] = useState<TipoIngreso>(editing?.tipoIngreso ?? 'ANTICIPO')
   const [concepto, setConcepto] = useState(editing?.concepto ?? '')
@@ -29,11 +30,11 @@ export default function IngresoFormPage() {
 
   const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
 
-  const doSave = (loadAnother: boolean) => {
+  const doSave = (loadAnother: boolean, montoNum: number) => {
     if (!user) return
 
     if (editing) {
-      updateIngreso(editing.ref, { fecha, id: obraId, tipoIngreso, concepto, monto: Number(monto), cuenta, caja })
+      updateIngreso(editing.ref, { fecha, id: obraId, tipoIngreso, concepto, monto: montoNum, cuenta, caja })
       // TODO: reemplazar con api.put(`/ingresos/${editing.ref}`, { ... })
       toast.success('Ingreso actualizado')
       navigate('/mis-registros')
@@ -41,7 +42,7 @@ export default function IngresoFormPage() {
     }
 
     const nuevo = addIngreso({
-      fecha, id: obraId, tipoIngreso, concepto, monto: Number(monto), cuenta, caja, estado: 'Confirmado',
+      fecha, id: obraId, tipoIngreso, concepto, monto: montoNum, cuenta, caja, estado: 'Confirmado',
     }, user.id)
     // TODO: reemplazar con api.post('/ingresos', nuevo)
 
@@ -59,17 +60,18 @@ export default function IngresoFormPage() {
   }
 
   const handleSave = (loadAnother: boolean) => {
-    if (!obraId || !monto) {
-      toast.error('Completá venta y monto')
+    const montoNum = toPositiveAmount(monto)
+    if (!obraId || !montoNum) {
+      toast.error(!obraId ? 'Completá la venta' : 'El monto debe ser mayor a cero')
       return
     }
-    const duplicado = findDuplicateIngreso(obraId, Number(monto), fecha)
+    const duplicado = findDuplicateIngreso(obraId, montoNum, fecha)
     if (duplicado && duplicado.ref !== editRef) {
       setPendingDuplicate(duplicado)
       setPendingLoadAnother(loadAnother)
       return
     }
-    doSave(loadAnother)
+    doSave(loadAnother, montoNum)
   }
 
   return (
@@ -107,7 +109,7 @@ export default function IngresoFormPage() {
 
         <div>
           <label className="text-sm text-muted-foreground mb-1.5 block">Monto</label>
-          <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+          <input type="number" min="0.01" step="0.01" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
         </div>
 
         <div>
@@ -158,7 +160,8 @@ export default function IngresoFormPage() {
         confirmLabel="Cargar igual"
         onConfirm={() => {
           setPendingDuplicate(null)
-          doSave(pendingLoadAnother)
+          const montoNum = toPositiveAmount(monto)
+          if (montoNum) doSave(pendingLoadAnother, montoNum)
         }}
       />
     </AppShell>

@@ -44,8 +44,8 @@ function RealLogin() {
     setLoading(true)
     try {
       const creds: LoginCredentials = { email, password, role }
-      await login(creds)
-      navigate(from ?? getDefaultRoute(role))
+      const authUser = await login(creds)
+      navigate(from ?? getDefaultRoute(authUser.role))
     } catch {
       setError('Email o contraseña incorrectos')
     } finally {
@@ -56,8 +56,8 @@ function RealLogin() {
   const handleBiometric = async () => {
     setBiometricLoading(true)
     try {
-      await loginWithBiometrics(role)
-      navigate(from ?? getDefaultRoute(role))
+      const authUser = await loginWithBiometrics(role)
+      navigate(from ?? getDefaultRoute(authUser.role))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error de autenticación biométrica'
       toast.error(msg)

@@ -6,6 +6,7 @@ import { SearchableSelect } from './SearchableSelect'
 import { CONFIG_LISTS, type Aprendizaje, type CausaDesvio, type Categoria } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { todayLocal } from '@/lib/format'
 
 interface AprendizajeDialogProps {
   open: boolean
@@ -43,7 +44,7 @@ export function AprendizajeDialog({ open, onClose, editing, fixedObra }: Aprendi
     const payload = {
       idPres: targetObraId, cliente, categoria, queSalioBien, queSalioMal, causaDesvio,
       hariaDiferente, aplicaAFuturas, registradoPor: user.name,
-      fechaCierre: editing?.fechaCierre ?? new Date().toISOString().slice(0, 10),
+      fechaCierre: editing?.fechaCierre ?? todayLocal(),
     }
 
     if (editing) {

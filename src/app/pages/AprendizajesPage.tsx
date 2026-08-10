@@ -73,6 +73,7 @@ export default function AprendizajesPage() {
       </div>
 
       <AprendizajeDialog
+        key={editing === null ? 'closed' : editing === 'nuevo' ? 'nuevo' : editing.idApr}
         open={editing !== null}
         onClose={() => setEditing(null)}
         editing={editing && editing !== 'nuevo' ? editing : undefined}

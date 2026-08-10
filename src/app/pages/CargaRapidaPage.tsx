@@ -7,7 +7,7 @@ import { AppShell } from '@/components/AppShell'
 import { MetricCard } from '@/components/MetricCard'
 import { EmptyState } from '@/components/EmptyState'
 import { usePorteData } from '@/modules/porte/store'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, localDateString, todayLocal } from '@/lib/format'
 
 interface FeedItem {
   key: string
@@ -38,11 +38,13 @@ const ACTIONS: ActionDef[] = [
 export default function CargaRapidaPage() {
   const navigate = useNavigate()
   const { ingresos, egresos, presupuestos } = usePorteData()
-  const hoy = new Date().toISOString().slice(0, 10)
+  const hoy = todayLocal()
 
   // Mismos datos que ve admin — sin filtrar por usuario, así "carga" tiene el panorama completo.
-  const ingresosHoy = ingresos.filter(i => i.activo && i.createdAt.slice(0, 10) === hoy)
-  const egresosHoy = egresos.filter(e => e.activo && e.createdAt.slice(0, 10) === hoy)
+  // Compara por fecha calendario local, no por el string UTC de createdAt (que corre un día
+  // para adelante en horario nocturno de Argentina).
+  const ingresosHoy = ingresos.filter(i => i.activo && localDateString(new Date(i.createdAt)) === hoy)
+  const egresosHoy = egresos.filter(e => e.activo && localDateString(new Date(e.createdAt)) === hoy)
   const registrosHoy = ingresosHoy.length + egresosHoy.length
   const totalIngresadoHoy = ingresosHoy.reduce((sum, i) => sum + i.monto, 0)
   const totalEgresadoHoy = egresosHoy.reduce((sum, e) => sum + e.monto, 0)

@@ -7,7 +7,8 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { CONFIG_LISTS, type TipoEgreso, type Cuenta, type TipoCaja, type Egreso } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
+import { toPositiveAmount } from '@/lib/validation'
 
 export default function EgresoFormPage() {
   const navigate = useNavigate()
@@ -17,7 +18,7 @@ export default function EgresoFormPage() {
   const editRef = searchParams.get('ref')
   const editing = editRef ? egresos.find(e => e.ref === editRef) : undefined
 
-  const [fecha, setFecha] = useState(editing?.fecha ?? new Date().toISOString().slice(0, 10))
+  const [fecha, setFecha] = useState(editing?.fecha ?? todayLocal())
   const [obraId, setObraId] = useState(editing?.id ?? '')
   const [proveedorId, setProveedorId] = useState(editing?.proveedor ?? '')
   const [tipoEgreso, setTipoEgreso] = useState<TipoEgreso>(editing?.tipoEgreso ?? 'MATERIALES')
@@ -34,11 +35,11 @@ export default function EgresoFormPage() {
   const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
   const proveedorOptions = proveedores.filter(p => p.activo).map(p => ({ value: p.idProv, label: p.nombre, sublabel: p.rubro }))
 
-  const doSave = (loadAnother: boolean) => {
+  const doSave = (loadAnother: boolean, montoNum: number) => {
     if (!user) return
     const payload = {
       fecha, id: obraId || undefined, proveedor: proveedorId || undefined, tipoEgreso, categoria,
-      monto: Number(monto), cuenta, caja,
+      monto: montoNum, cuenta, caja,
       estado: esCheque ? 'Emitido' as const : 'Confirmado' as const,
       fechaEmision: esCheque ? fechaEmision : undefined,
       fechaAcreditacion: esCheque ? fechaAcreditacion : undefined,
@@ -68,17 +69,18 @@ export default function EgresoFormPage() {
   }
 
   const handleSave = (loadAnother: boolean) => {
-    if (!monto) {
-      toast.error('Completá el monto')
+    const montoNum = toPositiveAmount(monto)
+    if (!montoNum) {
+      toast.error('El monto debe ser mayor a cero')
       return
     }
-    const duplicado = findDuplicateEgreso(obraId || undefined, Number(monto), fecha)
+    const duplicado = findDuplicateEgreso(obraId || undefined, montoNum, fecha)
     if (duplicado && duplicado.ref !== editRef) {
       setPendingDuplicate(duplicado)
       setPendingLoadAnother(loadAnother)
       return
     }
-    doSave(loadAnother)
+    doSave(loadAnother, montoNum)
   }
 
   return (
@@ -131,7 +133,7 @@ export default function EgresoFormPage() {
 
         <div>
           <label className="text-sm text-muted-foreground mb-1.5 block">Monto</label>
-          <input type="number" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+          <input type="number" min="0.01" step="0.01" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
         </div>
 
         <div>
@@ -200,7 +202,8 @@ export default function EgresoFormPage() {
         confirmLabel="Cargar igual"
         onConfirm={() => {
           setPendingDuplicate(null)
-          doSave(pendingLoadAnother)
+          const montoNum = toPositiveAmount(monto)
+          if (montoNum) doSave(pendingLoadAnother, montoNum)
         }}
       />
     </AppShell>

@@ -6,6 +6,7 @@ import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { PillSelect } from '@/components/PillSelect'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ESTADO_COMERCIAL_CONFIG, CONFIG_LISTS, type EstadoComercial, type Presupuesto } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
@@ -15,11 +16,13 @@ import { formatCurrency, formatDate } from '@/lib/format'
 export default function PresupuestosPage() {
   const navigate = useNavigate()
   const { user, can } = useAuth()
-  const { presupuestos: allPresupuestos, aceptarPresupuesto, updatePresupuesto } = usePorteData()
+  const { presupuestos: allPresupuestos, aceptarPresupuesto, updatePresupuesto, softDeletePresupuesto } = usePorteData()
   const [query, setQuery] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string>('all')
   const [categoriaFilter, setCategoriaFilter] = useState<string>('all')
+  const [pendingDelete, setPendingDelete] = useState<Presupuesto | null>(null)
   const puedeEditar = can('presupuestos:write')
+  const puedeEliminar = can('presupuestos:delete')
 
   const handleAceptar = (p: Presupuesto) => {
     if (!user) return
@@ -119,10 +122,29 @@ export default function PresupuestosPage() {
                 { label: 'Monto', value: formatCurrency(p.montoTotal), highlight: true },
                 { label: 'Fecha', value: formatDate(p.fecha) },
               ]}
+              actions={
+                puedeEliminar && (
+                  <button onClick={e => { e.stopPropagation(); setPendingDelete(p) }} className="text-sm font-medium text-destructive">Eliminar</button>
+                )
+              }
             />
           )}
         />
       </div>
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        onOpenChange={open => !open && setPendingDelete(null)}
+        title="Eliminar presupuesto"
+        description={pendingDelete ? `Se dará de baja el presupuesto ${pendingDelete.id} (${pendingDelete.cliente}). No se borra físicamente, queda inactivo.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={() => {
+          if (pendingDelete) softDeletePresupuesto(pendingDelete.id)
+          toast.success('Presupuesto eliminado')
+          setPendingDelete(null)
+        }}
+      />
     </AppShell>
   )
 }

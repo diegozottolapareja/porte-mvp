@@ -12,7 +12,7 @@ import { Button } from '@/app/components/ui/button'
 import { CONFIG_LISTS, type Proveedor, type Cuenta, type TipoCaja } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, todayLocal } from '@/lib/format'
 
 export default function ProveedoresPage() {
   const navigate = useNavigate()
@@ -64,7 +64,11 @@ export default function ProveedoresPage() {
         )}
       />
 
-      <ProveedorDialog value={editing} onClose={() => setEditing(null)} />
+      <ProveedorDialog
+        key={editing === null ? 'closed' : editing === 'nuevo' ? 'nuevo' : editing.idProv}
+        value={editing}
+        onClose={() => setEditing(null)}
+      />
 
       <ConfirmModal
         open={!!pendingDelete}
@@ -88,29 +92,18 @@ function ProveedorDialog({ value, onClose }: { value: Proveedor | 'nuevo' | null
   const { addProveedor, updateProveedor } = usePorteData()
   const existing = value && value !== 'nuevo' ? value : undefined
 
-  const [nombre, setNombre] = useState('')
-  const [rubro, setRubro] = useState('')
-  const [contacto, setContacto] = useState('')
-  const [telefono, setTelefono] = useState('')
-  const [plazoDias, setPlazoDias] = useState('')
-  const [cuentaBanco, setCuentaBanco] = useState<Cuenta | ''>('')
-  const [tipoCaja, setTipoCaja] = useState<TipoCaja>('BLANCA')
-  const [observaciones, setObservaciones] = useState('')
+  const [nombre, setNombre] = useState(existing?.nombre ?? '')
+  const [rubro, setRubro] = useState(existing?.rubro ?? '')
+  const [contacto, setContacto] = useState(existing?.contacto ?? '')
+  const [telefono, setTelefono] = useState(existing?.telefono ?? '')
+  const [plazoDias, setPlazoDias] = useState(existing?.plazoDias?.toString() ?? '')
+  const [cuentaBanco, setCuentaBanco] = useState<Cuenta | ''>(existing?.cuentaBanco ?? '')
+  const [tipoCaja, setTipoCaja] = useState<TipoCaja>(existing?.tipoCaja ?? 'BLANCA')
+  const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
 
   const open = value !== null
 
-  const resetIfNeeded = () => {
-    if (existing) {
-      setNombre(existing.nombre); setRubro(existing.rubro); setContacto(existing.contacto)
-      setTelefono(existing.telefono); setPlazoDias(existing.plazoDias?.toString() ?? '')
-      setCuentaBanco(existing.cuentaBanco ?? ''); setTipoCaja(existing.tipoCaja); setObservaciones(existing.observaciones ?? '')
-    } else {
-      setNombre(''); setRubro(''); setContacto(''); setTelefono(''); setPlazoDias(''); setCuentaBanco(''); setTipoCaja('BLANCA'); setObservaciones('')
-    }
-  }
-
   const handleOpenChange = (next: boolean) => {
-    if (next) resetIfNeeded()
     if (!next) onClose()
   }
 
@@ -130,7 +123,7 @@ function ProveedorDialog({ value, onClose }: { value: Proveedor | 'nuevo' | null
       updateProveedor(existing.idProv, payload)
       toast.success('Proveedor actualizado')
     } else {
-      addProveedor({ ...payload, saldoCc: 0, fechaSaldoInicial: new Date().toISOString().slice(0, 10) }, user.id)
+      addProveedor({ ...payload, saldoCc: 0, fechaSaldoInicial: todayLocal() }, user.id)
       toast.success('Proveedor creado')
     }
     onClose()

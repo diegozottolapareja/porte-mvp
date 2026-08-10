@@ -73,6 +73,7 @@ export default function VariacionesPage() {
       </div>
 
       <VariacionDialog
+        key={editing === null ? 'closed' : editing === 'nuevo' ? 'nuevo' : editing.idVar}
         open={editing !== null}
         onClose={() => setEditing(null)}
         editing={editing && editing !== 'nuevo' ? editing : undefined}

@@ -1,14 +1,17 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
-import type { EstadoIngreso } from '@/modules/porte'
+import type { EstadoIngreso, Ingreso } from '@/modules/porte'
 
 const ESTADO_INGRESO_STYLE: Record<EstadoIngreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
@@ -19,9 +22,11 @@ const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 export default function IngresosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { ingresos, updateIngreso } = usePorteData()
+  const { ingresos, updateIngreso, softDeleteIngreso } = usePorteData()
+  const [pendingDelete, setPendingDelete] = useState<Ingreso | null>(null)
   const activos = ingresos.filter(i => i.activo)
   const puedeEditar = can('ingresos:write')
+  const puedeEliminar = can('ingresos:delete')
 
   const totalPeriodo = activos
     .filter(i => i.estado === 'Confirmado')
@@ -72,10 +77,36 @@ export default function IngresosPage() {
                 { label: 'Monto', value: formatCurrency(ingreso.monto), highlight: true },
                 { label: 'Cuenta', value: ingreso.cuenta },
               ]}
+              actions={
+                (puedeEditar || puedeEliminar) && (
+                  <div className="flex items-center gap-4">
+                    {puedeEditar && (
+                      <button onClick={() => navigate(`/ingresos/nuevo?ref=${ingreso.ref}`)} className="text-sm font-medium text-primary">Editar</button>
+                    )}
+                    {puedeEliminar && (
+                      <button onClick={() => setPendingDelete(ingreso)} className="text-sm font-medium text-destructive">Eliminar</button>
+                    )}
+                  </div>
+                )
+              }
             />
           )}
         />
       </div>
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        onOpenChange={open => !open && setPendingDelete(null)}
+        title="Eliminar ingreso"
+        description={pendingDelete ? `Se dará de baja el ingreso de ${formatCurrency(pendingDelete.monto)} en ${pendingDelete.id}. No se borra físicamente, queda inactivo.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={() => {
+          if (pendingDelete) softDeleteIngreso(pendingDelete.ref)
+          toast.success('Ingreso eliminado')
+          setPendingDelete(null)
+        }}
+      />
     </AppShell>
   )
 }

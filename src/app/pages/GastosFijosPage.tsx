@@ -12,7 +12,8 @@ import { PillSelect } from '@/components/PillSelect'
 import { calcDiferencia, CONFIG_LISTS, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja } from '@/modules/porte'
 import { usePorteData, gastoFijoKey } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
+import { isNegativeAmount } from '@/lib/validation'
 
 const ESTADO_STYLE: Record<EstadoGastoFijo, { label: string; color: string; bgColor: string }> = {
   PAGADO: { label: 'PAGADO', color: 'text-green-700', bgColor: 'bg-green-100' },
@@ -93,7 +94,11 @@ export default function GastosFijosPage() {
         }}
       />
 
-      <GastoFijoDialog value={editing} onClose={() => setEditing(null)} />
+      <GastoFijoDialog
+        key={editing === null ? 'closed' : editing === 'nuevo' ? 'nuevo' : gastoFijoKey(editing)}
+        value={editing}
+        onClose={() => setEditing(null)}
+      />
 
       <ConfirmModal
         open={!!pendingDelete}
@@ -117,40 +122,30 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
   const { addGastoFijo, updateGastoFijo } = usePorteData()
   const existing = value && value !== 'nuevo' ? value : undefined
 
-  const [fecha, setFecha] = useState('')
-  const [concepto, setConcepto] = useState('')
-  const [categoria, setCategoria] = useState<CategGastoFijo>(CONFIG_LISTS.CATEG_GASTO_FIJO[0])
-  const [montoPrevisto, setMontoPrevisto] = useState('')
-  const [montoReal, setMontoReal] = useState('')
-  const [periodicidad, setPeriodicidad] = useState<Periodicidad>('Mensual')
-  const [cuenta, setCuenta] = useState<Cuenta>(CONFIG_LISTS.CUENTAS[0])
-  const [tipoCaja, setTipoCaja] = useState<TipoCaja>('BLANCA')
-  const [estado, setEstado] = useState<EstadoGastoFijo>('PREVISTO')
-  const [observaciones, setObservaciones] = useState('')
+  const [fecha, setFecha] = useState(existing?.fecha ?? todayLocal())
+  const [concepto, setConcepto] = useState(existing?.concepto ?? '')
+  const [categoria, setCategoria] = useState<CategGastoFijo>(existing?.categoria ?? CONFIG_LISTS.CATEG_GASTO_FIJO[0])
+  const [montoPrevisto, setMontoPrevisto] = useState(existing?.montoPrevisto?.toString() ?? '')
+  const [montoReal, setMontoReal] = useState(existing?.montoReal?.toString() ?? '')
+  const [periodicidad, setPeriodicidad] = useState<Periodicidad>(existing?.periodicidad ?? 'Mensual')
+  const [cuenta, setCuenta] = useState<Cuenta>(existing?.cuenta ?? CONFIG_LISTS.CUENTAS[0])
+  const [tipoCaja, setTipoCaja] = useState<TipoCaja>(existing?.tipoCaja ?? 'BLANCA')
+  const [estado, setEstado] = useState<EstadoGastoFijo>(existing?.estado ?? 'PREVISTO')
+  const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
 
   const open = value !== null
 
-  const resetIfNeeded = () => {
-    if (existing) {
-      setFecha(existing.fecha); setConcepto(existing.concepto); setCategoria(existing.categoria)
-      setMontoPrevisto(existing.montoPrevisto.toString()); setMontoReal(existing.montoReal?.toString() ?? '')
-      setPeriodicidad(existing.periodicidad); setCuenta(existing.cuenta); setTipoCaja(existing.tipoCaja)
-      setEstado(existing.estado); setObservaciones(existing.observaciones ?? '')
-    } else {
-      setFecha(new Date().toISOString().slice(0, 10)); setConcepto(''); setCategoria(CONFIG_LISTS.CATEG_GASTO_FIJO[0])
-      setMontoPrevisto(''); setMontoReal(''); setPeriodicidad('Mensual'); setCuenta(CONFIG_LISTS.CUENTAS[0])
-      setTipoCaja('BLANCA'); setEstado('PREVISTO'); setObservaciones('')
-    }
-  }
-
   const handleOpenChange = (next: boolean) => {
-    if (next) resetIfNeeded()
     if (!next) onClose()
   }
 
   const handleSave = () => {
     if (!concepto || !montoPrevisto || !user) {
       toast.error('Completá concepto y monto previsto')
+      return
+    }
+    if (isNegativeAmount(montoPrevisto) || isNegativeAmount(montoReal)) {
+      toast.error('El monto no puede ser negativo')
       return
     }
     const payload = {
@@ -197,11 +192,11 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-sm text-muted-foreground mb-1.5 block">Monto previsto *</label>
-              <input type="number" value={montoPrevisto} onChange={e => setMontoPrevisto(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
+              <input type="number" min="0" value={montoPrevisto} onChange={e => setMontoPrevisto(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
             </div>
             <div>
               <label className="text-sm text-muted-foreground mb-1.5 block">Monto real</label>
-              <input type="number" value={montoReal} onChange={e => setMontoReal(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
+              <input type="number" min="0" value={montoReal} onChange={e => setMontoReal(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
             </div>
           </div>
           <div>

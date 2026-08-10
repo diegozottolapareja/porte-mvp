@@ -5,6 +5,7 @@ import { Button } from '@/app/components/ui/button'
 import { CONFIG_LISTS, type Venta, type CondicionPago, type TipoCaja } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { isNegativeAmount, toPositiveAmount } from '@/lib/validation'
 
 interface VentaDialogProps {
   open: boolean
@@ -37,12 +38,26 @@ export function VentaDialog({ open, onClose, editing }: VentaDialogProps) {
       toast.error('Completá cliente y venta final')
       return
     }
+    const ventaFinalNum = toPositiveAmount(ventaFinal)
+    if (!ventaFinalNum) {
+      toast.error('La venta final debe ser mayor a cero')
+      return
+    }
+    const costos: Array<[string, string]> = [
+      ['Materiales', mater], ['Mano de obra', mo], ['Indirectos', indVend],
+      ['Impuestos', imp], ['Comercial', comerc], ['Beneficio', benef],
+    ]
+    const costoNegativo = costos.find(([, v]) => isNegativeAmount(v))
+    if (costoNegativo) {
+      toast.error(`${costoNegativo[0]} no puede ser negativo`)
+      return
+    }
     const montoTotal = Number(mater) + Number(mo) + Number(indVend) + Number(imp) + Number(comerc) + Number(benef)
     const payload = {
       cliente,
       montoTotal,
       mater: Number(mater), mo: Number(mo), indVend: Number(indVend), imp: Number(imp), comerc: Number(comerc), benef: Number(benef),
-      ventaFinal: Number(ventaFinal),
+      ventaFinal: ventaFinalNum,
       condPago: condPago || undefined,
       dias: dias === '' ? undefined : Number(dias),
       cajaIntenc,
@@ -74,32 +89,32 @@ export function VentaDialog({ open, onClose, editing }: VentaDialogProps) {
           </div>
           <div>
             <label className="text-sm text-muted-foreground mb-1.5 block">Venta final *</label>
-            <input type="number" value={ventaFinal} onChange={e => setVentaFinal(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
+            <input type="number" min="0.01" step="0.01" value={ventaFinal} onChange={e => setVentaFinal(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Materiales</label>
-              <input type="number" value={mater} onChange={e => setMater(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
+              <input type="number" min="0" value={mater} onChange={e => setMater(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Mano de obra</label>
-              <input type="number" value={mo} onChange={e => setMo(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
+              <input type="number" min="0" value={mo} onChange={e => setMo(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Indirectos</label>
-              <input type="number" value={indVend} onChange={e => setIndVend(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
+              <input type="number" min="0" value={indVend} onChange={e => setIndVend(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Impuestos</label>
-              <input type="number" value={imp} onChange={e => setImp(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
+              <input type="number" min="0" value={imp} onChange={e => setImp(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Comercial</label>
-              <input type="number" value={comerc} onChange={e => setComerc(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
+              <input type="number" min="0" value={comerc} onChange={e => setComerc(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Beneficio</label>
-              <input type="number" value={benef} onChange={e => setBenef(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
+              <input type="number" min="0" value={benef} onChange={e => setBenef(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-border text-sm" />
             </div>
           </div>
           <div>

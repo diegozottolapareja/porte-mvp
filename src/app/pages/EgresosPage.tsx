@@ -1,14 +1,17 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Plus, Clock3 } from 'lucide-react'
+import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
-import type { EstadoEgreso } from '@/modules/porte'
+import type { EstadoEgreso, Egreso } from '@/modules/porte'
 
 const ESTADO_STYLE: Record<EstadoEgreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
@@ -20,9 +23,11 @@ const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 export default function EgresosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { egresos, updateEgreso } = usePorteData()
+  const { egresos, updateEgreso, softDeleteEgreso } = usePorteData()
+  const [pendingDelete, setPendingDelete] = useState<Egreso | null>(null)
   const activos = egresos.filter(e => e.activo)
   const puedeEditar = can('egresos:write')
+  const puedeEliminar = can('egresos:delete')
 
   const chequesFuturos = activos.filter(e => e.estado === 'Emitido' && e.fechaAcreditacion)
 
@@ -78,10 +83,36 @@ export default function EgresosPage() {
                 { label: 'Cuenta', value: egreso.cuenta },
                 ...(egreso.fechaAcreditacion ? [{ label: 'Acreditación', value: formatDate(egreso.fechaAcreditacion) }] : []),
               ]}
+              actions={
+                (puedeEditar || puedeEliminar) && (
+                  <div className="flex items-center gap-4">
+                    {puedeEditar && (
+                      <button onClick={() => navigate(`/egresos/nuevo?ref=${egreso.ref}`)} className="text-sm font-medium text-primary">Editar</button>
+                    )}
+                    {puedeEliminar && (
+                      <button onClick={() => setPendingDelete(egreso)} className="text-sm font-medium text-destructive">Eliminar</button>
+                    )}
+                  </div>
+                )
+              }
             />
           )}
         />
       </div>
+
+      <ConfirmModal
+        open={!!pendingDelete}
+        onOpenChange={open => !open && setPendingDelete(null)}
+        title="Eliminar egreso"
+        description={pendingDelete ? `Se dará de baja el egreso de ${formatCurrency(pendingDelete.monto)}${pendingDelete.id ? ` en ${pendingDelete.id}` : ''}. No se borra físicamente, queda inactivo.` : undefined}
+        confirmLabel="Eliminar"
+        destructive
+        onConfirm={() => {
+          if (pendingDelete) softDeleteEgreso(pendingDelete.ref)
+          toast.success('Egreso eliminado')
+          setPendingDelete(null)
+        }}
+      />
     </AppShell>
   )
 }
