@@ -12,8 +12,8 @@ import { EstadoOperativoSelect } from '@/components/EstadoOperativoSelect'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs'
 import { Progress } from '@/app/components/ui/progress'
 import {
-  ESTADO_OPERATIVO_CONFIG,
-  getTotalCobrado, getSaldoPendiente, getCostoEstimado, getDesvioCosto,
+  ESTADO_OPERATIVO_CONFIG, ESTADO_COBRO_CONFIG, RENTABILIDAD_RATING_CONFIG,
+  getTotalCobrado, getSaldoPendiente, getCostoEstimado, getDesvioCosto, getEstadoCobro, getRentabilidadRating,
   type EstadoOperativo, type Variacion, type Aprendizaje,
 } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
@@ -54,27 +54,35 @@ export default function ObraDetailPage() {
   const costoEstimado = getCostoEstimado(venta)
   const desvio = getDesvioCosto(venta, egresos)
   const estado = ESTADO_OPERATIVO_CONFIG[venta.estadoOp]
+  const estadoCobro = ESTADO_COBRO_CONFIG[getEstadoCobro(venta, ingresos)]
+  const rentabilidad = getRentabilidadRating(venta, egresos)
+  const rentabilidadCfg = rentabilidad ? RENTABILIDAD_RATING_CONFIG[rentabilidad] : undefined
 
   const ingresosObra = ingresos.filter(i => i.activo && i.id === venta.id)
   const egresosObra = egresos.filter(e => e.activo && e.id === venta.id)
-  const variacionesObra = variaciones.filter(v => v.activo && v.idPres === venta.id.replace(' ', ''))
-  const aprendizajesObra = aprendizajes.filter(a => a.activo && a.idPres === venta.id.replace(' ', ''))
+  const variacionesObra = variaciones.filter(v => v.activo && v.idPres === venta.id)
+  const aprendizajesObra = aprendizajes.filter(a => a.activo && a.idPres === venta.id)
 
   return (
     <AppShell title={venta.id} onBack={() => navigate(-1)}>
       <div className="space-y-4">
         {/* KPIs de la obra */}
         <div className="bg-gradient-to-br from-primary to-accent rounded-3xl p-5 lg:p-6 text-white">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-2">
             <p className="text-white/70 text-sm">{venta.cliente}</p>
-            {can('ventas:write') ? (
-              <EstadoOperativoSelect
-                value={venta.estadoOp}
-                onChange={value => updateVenta(venta.id, { estadoOp: value as EstadoOperativo })}
-              />
-            ) : (
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${estado.color} ${estado.bgColor}`}>{estado.label}</span>
-            )}
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${estadoCobro.color} ${estadoCobro.bgColor}`} title="Estado de cobro">
+                {estadoCobro.label}
+              </span>
+              {can('ventas:write') ? (
+                <EstadoOperativoSelect
+                  value={venta.estadoOp}
+                  onChange={value => updateVenta(venta.id, { estadoOp: value as EstadoOperativo })}
+                />
+              ) : (
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${estado.color} ${estado.bgColor}`}>{estado.label}</span>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div>
@@ -117,7 +125,18 @@ export default function ObraDetailPage() {
             </div>
 
             <div className="bg-white rounded-2xl border border-border p-4">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Costeo estimado vs real</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Costeo estimado vs real</h3>
+                {rentabilidadCfg ? (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${rentabilidadCfg.color} ${rentabilidadCfg.bgColor}`} title="Nota de rentabilidad">
+                    {rentabilidadCfg.label}
+                  </span>
+                ) : (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full text-gray-500 bg-gray-100" title="Todavía no hay egresos cargados para esta obra">
+                    Sin datos
+                  </span>
+                )}
+              </div>
               <div className="space-y-2 mb-3">
                 {CATEGORIAS_COSTO.map(c => (
                   <div key={c.key} className="flex items-center justify-between text-sm">
@@ -227,14 +246,14 @@ export default function ObraDetailPage() {
         open={editingVariacion !== null}
         onClose={() => setEditingVariacion(null)}
         editing={editingVariacion && editingVariacion !== 'nuevo' ? editingVariacion : undefined}
-        fixedObra={{ idPres: venta.id.replace(' ', ''), cliente: venta.cliente }}
+        fixedObra={{ idPres: venta.id, cliente: venta.cliente }}
       />
       <AprendizajeDialog
         key={editingAprendizaje === null ? 'closed' : editingAprendizaje === 'nuevo' ? 'nuevo' : editingAprendizaje.idApr}
         open={editingAprendizaje !== null}
         onClose={() => setEditingAprendizaje(null)}
         editing={editingAprendizaje && editingAprendizaje !== 'nuevo' ? editingAprendizaje : undefined}
-        fixedObra={{ idPres: venta.id.replace(' ', ''), cliente: venta.cliente, categoria: 'OTRO' }}
+        fixedObra={{ idPres: venta.id, cliente: venta.cliente, categoria: 'OTRO' }}
       />
 
       <ConfirmModal

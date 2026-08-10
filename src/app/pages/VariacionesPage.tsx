@@ -40,7 +40,7 @@ export default function VariacionesPage() {
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
           <button onClick={() => setObraFilter('all')} className={`shrink-0 px-3 py-1.5 rounded-xl border text-sm ${obraFilter === 'all' ? 'bg-primary text-white border-primary' : 'bg-white text-muted-foreground border-border'}`}>Todas las ventas</button>
           {ventas.map(v => (
-            <button key={v.id} onClick={() => setObraFilter(v.id.replace(' ', ''))} className={`shrink-0 px-3 py-1.5 rounded-xl border text-sm ${obraFilter === v.id.replace(' ', '') ? 'bg-primary text-white border-primary' : 'bg-white text-muted-foreground border-border'}`}>{v.id}</button>
+            <button key={v.id} onClick={() => setObraFilter(v.id)} className={`shrink-0 px-3 py-1.5 rounded-xl border text-sm ${obraFilter === v.id ? 'bg-primary text-white border-primary' : 'bg-white text-muted-foreground border-border'}`}>{v.id}</button>
           ))}
         </div>
 

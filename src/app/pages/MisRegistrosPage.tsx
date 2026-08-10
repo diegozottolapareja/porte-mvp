@@ -6,7 +6,7 @@ import { AppShell } from '@/components/AppShell'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs'
-import { gastoFijoKey, usePorteData } from '@/modules/porte/store'
+import { usePorteData } from '@/modules/porte/store'
 import { formatCurrency, formatDate, localDateString } from '@/lib/format'
 
 type Tab = 'todos' | 'ingresos' | 'egresos' | 'presupuestos' | 'proveedores' | 'gastosfijos' | 'variaciones' | 'aprendizajes'
@@ -79,8 +79,8 @@ export default function MisRegistrosPage() {
       editPath: `/proveedores/${encodeURIComponent(p.idProv)}`, onDelete: () => softDeleteProveedor(p.idProv),
     })),
     ...gastosFijos.filter(g => g.activo).map(g => ({
-      key: `gf-${gastoFijoKey(g)}`, tipo: 'Gasto fijo', concepto: g.concepto, obra: undefined, fecha: g.fecha, monto: g.montoPrevisto, estado: g.estado, createdBy: g.createdBy,
-      editPath: '/gastos-fijos', onDelete: () => softDeleteGastoFijo(gastoFijoKey(g)),
+      key: `gf-${g.id}`, tipo: 'Gasto fijo', concepto: g.concepto, obra: undefined, fecha: g.fecha, monto: g.montoPrevisto, estado: g.estado, createdBy: g.createdBy,
+      editPath: '/gastos-fijos', onDelete: () => softDeleteGastoFijo(g.id),
     })),
     ...variaciones.filter(v => v.activo).map(v => ({
       key: `var-${v.idVar}`, tipo: 'Variación', concepto: v.descripcion, obra: v.idPres, fecha: v.fecha, monto: v.impacto, estado: v.tipoVar, createdBy: v.createdBy,

@@ -8,8 +8,13 @@
 // 03_INGRESOS     → Ingresos       07_VARIACIONES   → Variaciones
 // 04_EGRESOS      → Egresos        08_APRENDIZAJES  → Aprendizajes
 //
+// Clientes es un 9no módulo agregado fuera del Excel original (gap encontrado
+// contra el diseño: no existía maestro de clientes, solo texto libre en
+// ventas/presupuestos) — va junto a Proveedores por ser el mismo tipo de dato
+// (maestro), no intercalado en medio de los 8 originales.
+//
 // Cargar, Registros y Perfil no son módulos de negocio — son accesos, y van
-// agrupados aparte (nunca intercalados con los 8 de arriba). Dashboard y
+// agrupados aparte (nunca intercalados con los de arriba). Dashboard y
 // Config son exclusivos de admin y también en su propio grupo.
 
 import { rolesConfig } from './rolesConfig'
@@ -35,6 +40,7 @@ const BUSINESS_MODULES: NavItem[] = [
   { id: 'ingresos',     label: 'Ingresos',       icon: 'ArrowDownCircle', path: '/ingresos',      moduleId: 'ingresos' },
   { id: 'egresos',      label: 'Egresos',        icon: 'ArrowUpCircle',  path: '/egresos',       moduleId: 'egresos' },
   { id: 'proveedores',  label: 'Proveedores',    icon: 'Landmark',       path: '/proveedores',   moduleId: 'proveedores' },
+  { id: 'clientes',     label: 'Clientes',       icon: 'Users',          path: '/clientes',      moduleId: 'clientes' },
   { id: 'gastosfijos',  label: 'Gastos fijos',   icon: 'Wrench',         path: '/gastos-fijos',  moduleId: 'gastosfijos' },
   { id: 'variaciones',  label: 'Variaciones',    icon: 'GitBranch',      path: '/variaciones',   moduleId: 'variaciones' },
   { id: 'aprendizajes', label: 'Aprendizajes',   icon: 'Lightbulb',      path: '/aprendizajes',  moduleId: 'aprendizajes' },

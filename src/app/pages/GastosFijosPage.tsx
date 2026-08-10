@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/app/components/ui/button'
 import { PillSelect } from '@/components/PillSelect'
 import { calcDiferencia, CONFIG_LISTS, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja } from '@/modules/porte'
-import { usePorteData, gastoFijoKey } from '@/modules/porte/store'
+import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { isNegativeAmount } from '@/lib/validation'
@@ -48,7 +48,7 @@ export default function GastosFijosPage() {
     >
       <EntityList
         items={activos}
-        keyExtractor={g => gastoFijoKey(g)}
+        keyExtractor={g => g.id}
         emptyTitle="Sin gastos fijos"
         emptyAction={can('gastosfijos:write') ? { label: 'Nuevo gasto fijo', onClick: () => setEditing('nuevo') } : undefined}
         renderItem={g => {
@@ -65,7 +65,7 @@ export default function GastosFijosPage() {
                     value={g.estado}
                     options={ESTADOS}
                     style={v => ESTADO_STYLE[v]}
-                    onChange={estado => updateGastoFijo(gastoFijoKey(g), { estado })}
+                    onChange={estado => updateGastoFijo(g.id, { estado })}
                   />
                 ) : (
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>
@@ -95,7 +95,7 @@ export default function GastosFijosPage() {
       />
 
       <GastoFijoDialog
-        key={editing === null ? 'closed' : editing === 'nuevo' ? 'nuevo' : gastoFijoKey(editing)}
+        key={editing === null ? 'closed' : editing === 'nuevo' ? 'nuevo' : editing.id}
         value={editing}
         onClose={() => setEditing(null)}
       />
@@ -108,7 +108,7 @@ export default function GastosFijosPage() {
         confirmLabel="Eliminar"
         destructive
         onConfirm={() => {
-          if (pendingDelete) softDeleteGastoFijo(gastoFijoKey(pendingDelete))
+          if (pendingDelete) softDeleteGastoFijo(pendingDelete.id)
           toast.success('Gasto fijo eliminado')
           setPendingDelete(null)
         }}
@@ -157,7 +157,7 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
       observaciones: observaciones || undefined,
     }
     if (existing) {
-      updateGastoFijo(gastoFijoKey(existing), payload)
+      updateGastoFijo(existing.id, payload)
       toast.success('Gasto fijo actualizado')
     } else {
       addGastoFijo(payload, user.id)

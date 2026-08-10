@@ -2,6 +2,7 @@ import { MOCK_INGRESOS, type Ingreso } from './data/ingresos'
 import { MOCK_EGRESOS, type Egreso } from './data/egresos'
 import type { Venta } from './data/ventas'
 import type { Presupuesto } from './data/presupuestos'
+import type { EstadoCobro, RentabilidadRating } from './data/config'
 
 // ─── Derivados de una venta — no se guardan, se calculan en runtime ──────────
 // Aceptan `ingresos`/`egresos` opcionales para leer del store en runtime;
@@ -29,6 +30,30 @@ export function getCostoEstimado(venta: Venta): number {
 
 export function getDesvioCosto(venta: Venta, egresos: Egreso[] = MOCK_EGRESOS): number {
   return getTotalEgresado(venta.id, egresos) - getCostoEstimado(venta)
+}
+
+/** Estado financiero de la obra según lo cobrado — eje independiente del estado de taller (estadoOp). */
+export function getEstadoCobro(venta: Venta, ingresos: Ingreso[] = MOCK_INGRESOS): EstadoCobro {
+  const cobrado = getTotalCobrado(venta.id, ingresos)
+  if (cobrado <= 0) return 'Pendiente de anticipo'
+  if (cobrado >= venta.ventaFinal) return 'Cobrado'
+  return 'Cobro parcial'
+}
+
+// Umbrales sobre el desvío de costeo (egresado real vs. estimado), como % del
+// costo estimado. Sin egresos registrados no hay base para calificar la obra.
+const UMBRAL_RENTABILIDAD_BUENA = 0.05
+const UMBRAL_RENTABILIDAD_REGULAR = 0.15
+
+/** Nota de rentabilidad por obra a partir del desvío de costeo — undefined si todavía no hay egresos cargados. */
+export function getRentabilidadRating(venta: Venta, egresos: Egreso[] = MOCK_EGRESOS): RentabilidadRating | undefined {
+  if (getTotalEgresado(venta.id, egresos) <= 0) return undefined
+  const costoEstimado = getCostoEstimado(venta)
+  if (costoEstimado <= 0) return undefined
+  const desvioPct = getDesvioCosto(venta, egresos) / costoEstimado
+  if (desvioPct <= UMBRAL_RENTABILIDAD_BUENA) return 'Buena'
+  if (desvioPct <= UMBRAL_RENTABILIDAD_REGULAR) return 'Regular'
+  return 'Mala'
 }
 
 // ─── Transición Presupuesto → Venta (mismo momento en que estadoComercial pasa a 'Aceptado') ──

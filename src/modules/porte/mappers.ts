@@ -4,6 +4,7 @@ import type { Egreso } from './data/egresos'
 import type { Presupuesto } from './data/presupuestos'
 import type { Venta } from './data/ventas'
 import type { Proveedor } from './data/proveedores'
+import type { Cliente } from './data/clientes'
 import type { GastoFijo } from './data/gastosFijos'
 import type { Variacion } from './data/variaciones'
 import type { Aprendizaje } from './data/aprendizajes'
@@ -155,9 +156,28 @@ export function proveedorToRow(p: Partial<Proveedor>): Row {
   return row
 }
 
+export function rowToCliente(r: Row): Cliente {
+  return {
+    idCli: r.id_cli, nombre: r.nombre, contacto: r.contacto ?? '', telefono: r.telefono ?? '',
+    direccion: r.direccion ?? undefined, activo: r.activo, observaciones: r.observaciones ?? undefined,
+    createdAt: r.created_at, createdBy: r.created_by, updatedAt: r.updated_at,
+  }
+}
+export function clienteToRow(c: Partial<Cliente>): Row {
+  const row: Row = {}
+  if (c.idCli !== undefined) row.id_cli = c.idCli
+  if (c.nombre !== undefined) row.nombre = c.nombre
+  if (c.contacto !== undefined) row.contacto = c.contacto
+  if (c.telefono !== undefined) row.telefono = c.telefono
+  if (c.direccion !== undefined) row.direccion = c.direccion ?? null
+  if (c.activo !== undefined) row.activo = c.activo
+  if (c.observaciones !== undefined) row.observaciones = c.observaciones ?? null
+  return row
+}
+
 export function rowToGastoFijo(r: Row): GastoFijo {
   return {
-    fecha: r.fecha, concepto: r.concepto, categoria: r.categoria, montoPrevisto: Number(r.monto_previsto ?? 0),
+    id: r.id, fecha: r.fecha, concepto: r.concepto, categoria: r.categoria, montoPrevisto: Number(r.monto_previsto ?? 0),
     montoReal: r.monto_real === null ? null : Number(r.monto_real), periodicidad: r.periodicidad, cuenta: r.cuenta,
     tipoCaja: r.tipo_caja, proveedorId: r.proveedor_id, estado: r.estado, observaciones: r.observaciones ?? undefined,
     activo: r.activo, createdAt: r.created_at, createdBy: r.created_by, updatedAt: r.updated_at,
@@ -165,6 +185,7 @@ export function rowToGastoFijo(r: Row): GastoFijo {
 }
 export function gastoFijoToRow(g: Partial<GastoFijo>): Row {
   const row: Row = {}
+  if (g.id !== undefined) row.id = g.id
   if (g.fecha !== undefined) row.fecha = g.fecha
   if (g.concepto !== undefined) row.concepto = g.concepto
   if (g.categoria !== undefined) row.categoria = g.categoria

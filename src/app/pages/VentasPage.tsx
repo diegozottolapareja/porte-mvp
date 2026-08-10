@@ -7,7 +7,7 @@ import { EntityCard } from '@/components/EntityCard'
 import { EstadoOperativoSelect } from '@/components/EstadoOperativoSelect'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { VentaDialog } from '@/components/VentaDialog'
-import { ESTADO_OPERATIVO_CONFIG, CONFIG_LISTS, getTotalCobrado, type EstadoOperativo } from '@/modules/porte'
+import { ESTADO_OPERATIVO_CONFIG, ESTADO_COBRO_CONFIG, CONFIG_LISTS, getTotalCobrado, getEstadoCobro, type EstadoOperativo } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '@/lib/format'
@@ -69,6 +69,7 @@ export default function VentasPage() {
               fields={[
                 { label: 'Venta final', value: formatCurrency(venta.ventaFinal), highlight: true },
                 { label: 'Cobrado', value: formatCurrency(getTotalCobrado(venta.id, ingresos)) },
+                { label: 'Estado de cobro', value: ESTADO_COBRO_CONFIG[getEstadoCobro(venta, ingresos)].label },
               ]}
             />
           )}

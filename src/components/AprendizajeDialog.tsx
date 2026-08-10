@@ -19,7 +19,7 @@ export function AprendizajeDialog({ open, onClose, editing, fixedObra }: Aprendi
   const { user } = useAuth()
   const { ventas, addAprendizaje, updateAprendizaje } = usePorteData()
 
-  const obraOptions = ventas.map(v => ({ value: v.id.replace(' ', ''), label: v.id, sublabel: v.cliente }))
+  const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
 
   const [obraId, setObraId] = useState(editing?.idPres ?? fixedObra?.idPres ?? '')
   const [queSalioBien, setQueSalioBien] = useState(editing?.queSalioBien ?? '')
@@ -37,7 +37,7 @@ export function AprendizajeDialog({ open, onClose, editing, fixedObra }: Aprendi
       toast.error('Completá la venta y qué salió bien')
       return
     }
-    const venta = ventas.find(v => v.id.replace(' ', '') === targetObraId)
+    const venta = ventas.find(v => v.id === targetObraId)
     const cliente = fixedObra?.cliente ?? venta?.cliente ?? ''
     const categoria = fixedObra?.categoria ?? 'OTRO'
 

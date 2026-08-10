@@ -8,6 +8,7 @@ export type Periodicidad = 'Mensual' | 'Bimestral' | 'Trimestral' | 'Anual' | '√
 export type EstadoGastoFijo = 'PREVISTO' | 'PAGADO' | 'VENCIDO'
 
 export interface GastoFijo {
+  id: string
   fecha: string
   concepto: string
   categoria: CategGastoFijo
@@ -29,7 +30,7 @@ export function calcDiferencia(g: Pick<GastoFijo, 'montoPrevisto' | 'montoReal'>
   return g.montoReal === null ? null : g.montoReal - g.montoPrevisto
 }
 
-const RAW_GASTOS_FIJOS: Omit<GastoFijo, 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>[] = [
+const RAW_GASTOS_FIJOS: Omit<GastoFijo, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>[] = [
   { fecha: '2026-06-01', concepto: 'Alquiler taller',     categoria: 'Alquiler',    montoPrevisto: 500000.00, montoReal: 500000.00, periodicidad: 'Mensual', cuenta: 'Efectivo Blanco', tipoCaja: 'BLANCA', proveedorId: null, estado: 'PAGADO',   observaciones: 'Vence el d√≠a 1 de cada mes' },
   { fecha: '2026-06-05', concepto: 'Sueldos taller',       categoria: 'Sueldos',      montoPrevisto: 1800000.00, montoReal: 1800000.00, periodicidad: 'Mensual', cuenta: 'Banco Macro',     tipoCaja: 'BLANCA', proveedorId: null, estado: 'PAGADO' },
   { fecha: '2026-06-10', concepto: 'Luz',                    categoria: 'Servicios',    montoPrevisto: 85000.00,  montoReal: 92000.00,  periodicidad: 'Mensual', cuenta: 'Banco Macro',     tipoCaja: 'BLANCA', proveedorId: null, estado: 'PAGADO' },
@@ -38,8 +39,9 @@ const RAW_GASTOS_FIJOS: Omit<GastoFijo, 'activo' | 'createdAt' | 'createdBy' | '
   { fecha: '2026-07-05', concepto: 'Sueldos taller',          categoria: 'Sueldos',       montoPrevisto: 1850000.00, montoReal: null,      periodicidad: 'Mensual', cuenta: 'Banco Macro',     tipoCaja: 'BLANCA', proveedorId: null, estado: 'PREVISTO' },
 ]
 
-export const MOCK_GASTOS_FIJOS: GastoFijo[] = RAW_GASTOS_FIJOS.map(g => ({
+export const MOCK_GASTOS_FIJOS: GastoFijo[] = RAW_GASTOS_FIJOS.map((g, i) => ({
   ...g,
+  id: `mock-gf-${i}`,
   activo: true,
   createdAt: `${g.fecha}T09:00:00.000Z`,
   createdBy: 'demo-admin',

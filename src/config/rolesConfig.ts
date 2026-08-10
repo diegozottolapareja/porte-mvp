@@ -20,6 +20,9 @@ export type Permission =
   | 'proveedores:read'
   | 'proveedores:write'
   | 'proveedores:delete'
+  | 'clientes:read'
+  | 'clientes:write'
+  | 'clientes:delete'
   | 'gastosfijos:read'
   | 'gastosfijos:write'
   | 'gastosfijos:delete'
@@ -55,11 +58,12 @@ export const rolesConfig: Record<string, RoleConfig> = {
       'ingresos:read', 'ingresos:write', 'ingresos:delete',
       'egresos:read', 'egresos:write', 'egresos:delete',
       'proveedores:read', 'proveedores:write', 'proveedores:delete',
+      'clientes:read', 'clientes:write', 'clientes:delete',
       'gastosfijos:read', 'gastosfijos:write', 'gastosfijos:delete',
       'variaciones:read', 'variaciones:write', 'variaciones:delete',
       'aprendizajes:read', 'aprendizajes:write', 'aprendizajes:delete',
     ],
-    modules: ['carga', 'ventas', 'ingresos', 'egresos', 'proveedores', 'gastosfijos', 'variaciones', 'aprendizajes', 'profile'],
+    modules: ['carga', 'ventas', 'ingresos', 'egresos', 'proveedores', 'clientes', 'gastosfijos', 'variaciones', 'aprendizajes', 'profile'],
     defaultRoute: '/carga',
   },
 }

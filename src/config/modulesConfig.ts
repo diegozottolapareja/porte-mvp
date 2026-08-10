@@ -16,6 +16,7 @@ export const modulesConfig: ModuleConfig[] = [
   { id: 'ingresos',     label: 'Ingresos',      description: 'Cobros de clientes',                                  enabled: true, path: '/ingresos' },
   { id: 'egresos',      label: 'Egresos',       description: 'Pagos a proveedores y gastos de venta',               enabled: true, path: '/egresos' },
   { id: 'proveedores',  label: 'Proveedores',   description: 'Registro y cuenta corriente',                         enabled: true, path: '/proveedores' },
+  { id: 'clientes',     label: 'Clientes',      description: 'Maestro de clientes',                                 enabled: true, path: '/clientes' },
   { id: 'gastosfijos',  label: 'Gastos fijos',  description: 'Estructura mensual prevista vs real',                 enabled: true, path: '/gastos-fijos' },
   { id: 'variaciones',  label: 'Variaciones',   description: 'Cambios post-venta',                                  enabled: true, path: '/variaciones' },
   { id: 'aprendizajes', label: 'Aprendizajes',  description: 'Retrospectivas de venta',                              enabled: true, path: '/aprendizajes' },

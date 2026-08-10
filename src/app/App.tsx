@@ -36,6 +36,8 @@ import EgresoFormPage from './pages/EgresoFormPage'
 // PORTE — Proveedores, gastos fijos, variaciones, aprendizajes
 import ProveedoresPage from './pages/ProveedoresPage'
 import ProveedorDetailPage from './pages/ProveedorDetailPage'
+import ClientesPage from './pages/ClientesPage'
+import ClienteDetailPage from './pages/ClienteDetailPage'
 import GastosFijosPage from './pages/GastosFijosPage'
 import VariacionesPage from './pages/VariacionesPage'
 import AprendizajesPage from './pages/AprendizajesPage'
@@ -97,6 +99,8 @@ export default function App() {
             {/* Proveedores, gastos fijos, variaciones, aprendizajes — shared: dataEntry opera las 8 entidades */}
             <Route path="/proveedores" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><ProveedoresPage /></PrivateRoute>} />
             <Route path="/proveedores/:id" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><ProveedorDetailPage /></PrivateRoute>} />
+            <Route path="/clientes" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><ClientesPage /></PrivateRoute>} />
+            <Route path="/clientes/:id" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><ClienteDetailPage /></PrivateRoute>} />
             <Route path="/gastos-fijos" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><GastosFijosPage /></PrivateRoute>} />
             <Route path="/variaciones" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><VariacionesPage /></PrivateRoute>} />
             <Route path="/aprendizajes" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><AprendizajesPage /></PrivateRoute>} />

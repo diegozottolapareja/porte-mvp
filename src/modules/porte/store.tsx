@@ -6,13 +6,14 @@ import type { Egreso } from './data/egresos'
 import type { Presupuesto } from './data/presupuestos'
 import type { Venta } from './data/ventas'
 import type { Proveedor } from './data/proveedores'
+import type { Cliente } from './data/clientes'
 import type { GastoFijo } from './data/gastosFijos'
 import type { Variacion } from './data/variaciones'
 import type { Aprendizaje } from './data/aprendizajes'
 import { procesarAceptacionPresupuesto } from './calculos'
 import {
   rowToIngreso, ingresoToRow, rowToEgreso, egresoToRow, rowToPresupuesto, presupuestoToRow,
-  rowToVenta, ventaToRow, rowToProveedor, proveedorToRow, rowToGastoFijo, gastoFijoToRow,
+  rowToVenta, ventaToRow, rowToProveedor, proveedorToRow, rowToCliente, clienteToRow, rowToGastoFijo, gastoFijoToRow,
   rowToVariacion, variacionToRow, rowToAprendizaje, aprendizajeToRow,
 } from './mappers'
 
@@ -49,6 +50,7 @@ interface PorteDataContextType {
   presupuestos: Presupuesto[]
   ventas: Venta[]
   proveedores: Proveedor[]
+  clientes: Cliente[]
   gastosFijos: GastoFijo[]
   variaciones: Variacion[]
   aprendizajes: Aprendizaje[]
@@ -58,7 +60,8 @@ interface PorteDataContextType {
   addPresupuesto: (data: Omit<Presupuesto, 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Presupuesto
   addVenta: (data: Omit<Venta, 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Venta
   addProveedor: (data: Omit<Proveedor, 'idProv' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Proveedor
-  addGastoFijo: (data: Omit<GastoFijo, 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => GastoFijo
+  addCliente: (data: Omit<Cliente, 'idCli' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Cliente
+  addGastoFijo: (data: Omit<GastoFijo, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => GastoFijo
   addVariacion: (data: Omit<Variacion, 'idVar' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Variacion
   addAprendizaje: (data: Omit<Aprendizaje, 'idApr' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Aprendizaje
 
@@ -67,7 +70,8 @@ interface PorteDataContextType {
   updatePresupuesto: (id: string, data: Partial<Presupuesto>) => void
   updateVenta: (id: string, data: Partial<Venta>) => void
   updateProveedor: (idProv: string, data: Partial<Proveedor>) => void
-  updateGastoFijo: (key: string, data: Partial<GastoFijo>) => void
+  updateCliente: (idCli: string, data: Partial<Cliente>) => void
+  updateGastoFijo: (id: string, data: Partial<GastoFijo>) => void
   updateVariacion: (idVar: string, data: Partial<Variacion>) => void
   updateAprendizaje: (idApr: string, data: Partial<Aprendizaje>) => void
 
@@ -92,7 +96,8 @@ interface PorteDataContextType {
   softDeleteEgreso: (ref: string) => void
   softDeletePresupuesto: (id: string) => void
   softDeleteProveedor: (idProv: string) => void
-  softDeleteGastoFijo: (key: string) => void
+  softDeleteCliente: (idCli: string) => void
+  softDeleteGastoFijo: (id: string) => void
   softDeleteVariacion: (idVar: string) => void
   softDeleteAprendizaje: (idApr: string) => void
 
@@ -102,11 +107,6 @@ interface PorteDataContextType {
 
 const PorteDataContext = createContext<PorteDataContextType | undefined>(undefined)
 
-// GastoFijo no tiene clave primaria propia en el Excel — se identifica por concepto+fecha, igual que en las listas.
-export function gastoFijoKey(g: Pick<GastoFijo, 'concepto' | 'fecha'>): string {
-  return `${g.concepto}-${g.fecha}`
-}
-
 export function PorteDataProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
@@ -115,6 +115,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
   const [ventas, setVentas] = useState<Venta[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
   const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
   const [variaciones, setVariaciones] = useState<Variacion[]>([])
   const [aprendizajes, setAprendizajes] = useState<Aprendizaje[]>([])
@@ -122,19 +123,20 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isAuthenticated) {
       setIngresos([]); setEgresos([]); setPresupuestos([]); setVentas([])
-      setProveedores([]); setGastosFijos([]); setVariaciones([]); setAprendizajes([])
+      setProveedores([]); setClientes([]); setGastosFijos([]); setVariaciones([]); setAprendizajes([])
       setIsLoading(true)
       return
     }
 
     let cancelled = false
     async function loadAll() {
-      const [ing, egr, pre, ven, prov, gf, vcar, apr] = await Promise.all([
+      const [ing, egr, pre, ven, prov, cli, gf, vcar, apr] = await Promise.all([
         supabase.from('ingresos').select('*').order('created_at', { ascending: false }),
         supabase.from('egresos').select('*').order('created_at', { ascending: false }),
         supabase.from('presupuestos').select('*').order('created_at', { ascending: false }),
         supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false }),
         supabase.from('v_proveedores_saldo').select('*'),
+        supabase.from('clientes').select('*').order('created_at', { ascending: false }),
         supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false }),
         supabase.from('variaciones').select('*').order('created_at', { ascending: false }),
         supabase.from('aprendizajes').select('*').order('created_at', { ascending: false }),
@@ -145,6 +147,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       if (pre.data) setPresupuestos(pre.data.map(rowToPresupuesto))
       if (ven.data) setVentas(ven.data.map(rowToVenta))
       if (prov.data) setProveedores(prov.data.map(rowToProveedor))
+      if (cli.data) setClientes(cli.data.map(rowToCliente))
       if (gf.data) setGastosFijos(gf.data.map(rowToGastoFijo))
       if (vcar.data) setVariaciones(vcar.data.map(rowToVariacion))
       if (apr.data) setAprendizajes(apr.data.map(rowToAprendizaje))
@@ -212,9 +215,18 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     return nuevo
   }
 
+  const addCliente: PorteDataContextType['addCliente'] = (data, userId) => {
+    const now = new Date().toISOString()
+    const nuevo: Cliente = { ...data, idCli: nextSeqId('CLI', clientes.map(c => c.idCli)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    setClientes(prev => [nuevo, ...prev])
+    supabase.from('clientes').insert({ ...clienteToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addCliente', error) })
+    return nuevo
+  }
+
   const addGastoFijo: PorteDataContextType['addGastoFijo'] = (data, userId) => {
     const now = new Date().toISOString()
-    const nuevo: GastoFijo = { ...data, activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    const nuevo: GastoFijo = { ...data, id: crypto.randomUUID(), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
     setGastosFijos(prev => [nuevo, ...prev])
     supabase.from('gastos_fijos').insert({ ...gastoFijoToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
       .then(({ error }) => { if (error) logPersistError('addGastoFijo', error) })
@@ -308,15 +320,17 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     supabase.from('proveedores').update({ ...proveedorToRow(data), updated_at: now }).eq('id_prov', idProv)
       .then(({ error }) => { if (error) logPersistError('updateProveedor', error) })
   }
-  const updateGastoFijo: PorteDataContextType['updateGastoFijo'] = (key, data) => {
+  const updateCliente: PorteDataContextType['updateCliente'] = (idCli, data) => {
     const now = new Date().toISOString()
-    const target = gastosFijos.find(g => gastoFijoKey(g) === key)
-    setGastosFijos(prev => prev.map(g => gastoFijoKey(g) === key ? { ...g, ...data, updatedAt: now } : g))
-    if (target) {
-      supabase.from('gastos_fijos').update({ ...gastoFijoToRow(data), updated_at: now })
-        .eq('concepto', target.concepto).eq('fecha', target.fecha)
-        .then(({ error }) => { if (error) logPersistError('updateGastoFijo', error) })
-    }
+    setClientes(prev => prev.map(c => c.idCli === idCli ? { ...c, ...data, updatedAt: now } : c))
+    supabase.from('clientes').update({ ...clienteToRow(data), updated_at: now }).eq('id_cli', idCli)
+      .then(({ error }) => { if (error) logPersistError('updateCliente', error) })
+  }
+  const updateGastoFijo: PorteDataContextType['updateGastoFijo'] = (id, data) => {
+    const now = new Date().toISOString()
+    setGastosFijos(prev => prev.map(g => g.id === id ? { ...g, ...data, updatedAt: now } : g))
+    supabase.from('gastos_fijos').update({ ...gastoFijoToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updateGastoFijo', error) })
   }
   const updateVariacion: PorteDataContextType['updateVariacion'] = (idVar, data) => {
     const now = new Date().toISOString()
@@ -344,7 +358,8 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   const softDeleteEgreso = (ref: string) => updateEgreso(ref, { activo: false })
   const softDeletePresupuesto = (id: string) => updatePresupuesto(id, { activo: false })
   const softDeleteProveedor = (idProv: string) => updateProveedor(idProv, { activo: false })
-  const softDeleteGastoFijo = (key: string) => updateGastoFijo(key, { activo: false })
+  const softDeleteCliente = (idCli: string) => updateCliente(idCli, { activo: false })
+  const softDeleteGastoFijo = (id: string) => updateGastoFijo(id, { activo: false })
   const softDeleteVariacion = (idVar: string) => updateVariacion(idVar, { activo: false })
   const softDeleteAprendizaje = (idApr: string) => updateAprendizaje(idApr, { activo: false })
 
@@ -358,13 +373,13 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     <PorteDataContext.Provider
       value={{
         isLoading,
-        ingresos, egresos, presupuestos, ventas, proveedores, gastosFijos, variaciones, aprendizajes,
-        addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addGastoFijo, addVariacion, addAprendizaje,
-        updateIngreso, updateEgreso, updatePresupuesto, updateVenta, updateProveedor, updateGastoFijo, updateVariacion, updateAprendizaje,
+        ingresos, egresos, presupuestos, ventas, proveedores, clientes, gastosFijos, variaciones, aprendizajes,
+        addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addCliente, addGastoFijo, addVariacion, addAprendizaje,
+        updateIngreso, updateEgreso, updatePresupuesto, updateVenta, updateProveedor, updateCliente, updateGastoFijo, updateVariacion, updateAprendizaje,
         nextPresupuestoId,
         aceptarPresupuesto,
         removeIngreso, removeEgreso,
-        softDeleteIngreso, softDeleteEgreso, softDeletePresupuesto, softDeleteProveedor, softDeleteGastoFijo, softDeleteVariacion, softDeleteAprendizaje,
+        softDeleteIngreso, softDeleteEgreso, softDeletePresupuesto, softDeleteProveedor, softDeleteCliente, softDeleteGastoFijo, softDeleteVariacion, softDeleteAprendizaje,
         findDuplicateIngreso, findDuplicateEgreso,
       }}
     >

@@ -20,7 +20,7 @@ export function VariacionDialog({ open, onClose, editing, fixedObra }: Variacion
   const { user } = useAuth()
   const { ventas, addVariacion, updateVariacion } = usePorteData()
 
-  const obraOptions = ventas.map(v => ({ value: v.id.replace(' ', ''), label: v.id, sublabel: v.cliente }))
+  const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
 
   const [obraId, setObraId] = useState(editing?.idPres ?? fixedObra?.idPres ?? '')
   const [tipoVar, setTipoVar] = useState<TipoVariacion>(editing?.tipoVar ?? CONFIG_LISTS.TIPO_VARIACION[0])
@@ -39,7 +39,7 @@ export function VariacionDialog({ open, onClose, editing, fixedObra }: Variacion
       toast.error('Completá la venta y la descripción')
       return
     }
-    const cliente = fixedObra?.cliente ?? ventas.find(v => v.id.replace(' ', '') === targetObraId)?.cliente ?? ''
+    const cliente = fixedObra?.cliente ?? ventas.find(v => v.id === targetObraId)?.cliente ?? ''
 
     const payload = {
       idPres: targetObraId, cliente, tipoVar, descripcion, valorAnterior, valorNuevo,
