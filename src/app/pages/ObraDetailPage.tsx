@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
@@ -35,10 +35,19 @@ export default function ObraDetailPage() {
   const { can } = useAuth()
   const { ventas, ingresos, egresos, variaciones, aprendizajes, updateVenta, softDeleteVariacion, softDeleteAprendizaje } = usePorteData()
   const venta = ventas.find(v => v.id === decodeURIComponent(id ?? ''))
+  const [searchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const highlightRef = searchParams.get('ref')
+  const initialTab = tabParam === 'ingresos' || tabParam === 'egresos' ? tabParam : 'datos'
   const [editingVariacion, setEditingVariacion] = useState<Variacion | 'nuevo' | null>(null)
   const [editingAprendizaje, setEditingAprendizaje] = useState<Aprendizaje | 'nuevo' | null>(null)
   const [deleteVariacion, setDeleteVariacion] = useState<Variacion | null>(null)
   const [deleteAprendizaje, setDeleteAprendizaje] = useState<Aprendizaje | null>(null)
+
+  useEffect(() => {
+    if (!highlightRef) return
+    document.getElementById(`registro-${highlightRef}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [highlightRef])
 
   if (!venta) {
     return (
@@ -104,7 +113,7 @@ export default function ObraDetailPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="datos">
+        <Tabs defaultValue={initialTab}>
           <TabsList className="w-full grid grid-cols-5 lg:w-auto lg:inline-grid">
             <TabsTrigger value="datos">Datos</TabsTrigger>
             <TabsTrigger value="ingresos">Ingresos</TabsTrigger>
@@ -173,7 +182,8 @@ export default function ObraDetailPage() {
               : ingresosObra.map(i => (
                 <div
                   key={i.ref}
-                  className="bg-white rounded-2xl border border-border p-4 flex items-center justify-between cursor-pointer"
+                  id={`registro-${i.ref}`}
+                  className={`bg-white rounded-2xl border p-4 flex items-center justify-between cursor-pointer ${i.ref === highlightRef ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}
                   onClick={() => navigate(`/ingresos/nuevo?ref=${encodeURIComponent(i.ref)}&obraId=${encodeURIComponent(venta.id)}`)}
                 >
                   <div>
@@ -196,7 +206,8 @@ export default function ObraDetailPage() {
               : egresosObra.map(e => (
                 <div
                   key={e.ref}
-                  className="bg-white rounded-2xl border border-border p-4 flex items-center justify-between cursor-pointer"
+                  id={`registro-${e.ref}`}
+                  className={`bg-white rounded-2xl border p-4 flex items-center justify-between cursor-pointer ${e.ref === highlightRef ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}
                   onClick={() => navigate(`/egresos/nuevo?ref=${encodeURIComponent(e.ref)}&obraId=${encodeURIComponent(venta.id)}`)}
                 >
                   <div>

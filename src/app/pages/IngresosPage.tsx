@@ -59,7 +59,7 @@ export default function IngresosPage() {
             <EntityCard
               title={ingreso.concepto}
               subtitle={`${ingreso.id} · ${formatDate(ingreso.fecha)}`}
-              onClick={() => navigate(`/ventas/${encodeURIComponent(ingreso.id)}`)}
+              onClick={() => navigate(`/ventas/${encodeURIComponent(ingreso.id)}?tab=ingresos&ref=${encodeURIComponent(ingreso.ref)}`)}
               statusNode={
                 puedeEditar ? (
                   <PillSelect
