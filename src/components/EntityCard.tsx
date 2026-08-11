@@ -9,6 +9,8 @@ export interface EntityCardField {
   /** Explicit grid slot. Omit to keep the default row-major auto-flow. */
   align?: 'left' | 'right'
   row?: number
+  rowSpan?: number
+  size?: 'default' | 'lg'
 }
 
 interface EntityCardProps {
@@ -54,14 +56,14 @@ export function EntityCard({ title, subtitle, fields, badge, status, statusNode,
 
         {fields && fields.length > 0 && (
           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {fields.map(({ label, value, highlight, align, row }) => (
+            {fields.map(({ label, value, highlight, align, row, rowSpan, size }) => (
               <div
                 key={label}
-                style={row ? { gridColumn: align === 'right' ? 2 : 1, gridRow: row } : undefined}
-                className={align === 'right' ? 'text-right' : undefined}
+                style={row ? { gridColumn: align === 'right' ? 2 : 1, gridRow: rowSpan ? `${row} / span ${rowSpan}` : row } : undefined}
+                className={[align === 'right' ? 'text-right' : '', rowSpan ? 'flex flex-col justify-center' : ''].filter(Boolean).join(' ')}
               >
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
-                <p className={`text-sm font-medium ${highlight ? 'text-primary' : 'text-gray-800'}`}>
+                <p className={`${size === 'lg' ? 'text-lg' : 'text-sm'} font-medium ${highlight ? 'text-primary' : 'text-gray-800'}`}>
                   {value ?? '—'}
                 </p>
               </div>
