@@ -29,14 +29,19 @@ export default function PresupuestoFormPage() {
   const [vencimiento, setVencimiento] = useState(existing?.vencimiento ?? '')
   const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
 
-  const costos = [costoMat, costoMo, indVendidos, impuestos, comercial, beneficio].map(v => Number(v))
-  const montoTotal = costos.every((_, i) => [costoMat, costoMo, indVendidos, impuestos, comercial, beneficio][i] !== '')
-    ? costos.reduce((sum, v) => sum + v, 0)
+  const costoValues = [costoMat, costoMo, indVendidos, impuestos, comercial, beneficio]
+  const hayAlgunCostoCargado = costoValues.some(v => v !== '')
+  const montoTotal = hayAlgunCostoCargado
+    ? costoValues.reduce((sum, v) => sum + (v === '' ? 0 : Number(v)), 0)
     : undefined
 
   const handleSave = () => {
     if (!cliente || !user) {
       toast.error('Completá el cliente')
+      return
+    }
+    if (costoMat === '' || costoMo === '') {
+      toast.error('Costo materiales y Costo M.O. son obligatorios')
       return
     }
 
@@ -129,8 +134,8 @@ export default function PresupuestoFormPage() {
         </Field>
 
         <div className="grid grid-cols-2 gap-3 lg:col-span-2 lg:grid-cols-3">
-          <Field label="Costo materiales"><input type="number" min="0" value={costoMat} onChange={e => setCostoMat(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
-          <Field label="Costo M.O."><input type="number" min="0" value={costoMo} onChange={e => setCostoMo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Costo materiales" required><input type="number" min="0" value={costoMat} onChange={e => setCostoMat(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+          <Field label="Costo M.O." required><input type="number" min="0" value={costoMo} onChange={e => setCostoMo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
           <Field label="Indirectos"><input type="number" min="0" value={indVendidos} onChange={e => setIndVendidos(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
           <Field label="Impuestos"><input type="number" min="0" value={impuestos} onChange={e => setImpuestos(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
           <Field label="Comercial"><input type="number" min="0" value={comercial} onChange={e => setComercial(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
