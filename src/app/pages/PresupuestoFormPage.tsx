@@ -12,7 +12,7 @@ export default function PresupuestoFormPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { id } = useParams()
-  const { presupuestos, ventas, addPresupuesto, updatePresupuesto, aceptarPresupuesto, nextPresupuestoId } = usePorteData()
+  const { presupuestos, ventas, addPresupuesto, updatePresupuesto, aceptarPresupuesto, nextPresupuestoId, findOrCreateCliente } = usePorteData()
   const existing = id ? presupuestos.find(p => p.id === decodeURIComponent(id)) : undefined
 
   const [cliente, setCliente] = useState(existing?.cliente ?? '')
@@ -53,6 +53,8 @@ export default function PresupuestoFormPage() {
       toast.error('El monto total debe ser mayor a cero')
       return
     }
+
+    findOrCreateCliente(cliente, user.id)
 
     const payload = {
       cliente, descripcion, categoria, responsable,

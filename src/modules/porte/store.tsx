@@ -61,6 +61,13 @@ interface PorteDataContextType {
   addVenta: (data: Omit<Venta, 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Venta
   addProveedor: (data: Omit<Proveedor, 'idProv' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Proveedor
   addCliente: (data: Omit<Cliente, 'idCli' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Cliente
+  /**
+   * Da de alta el cliente en el maestro si el nombre (case-insensitive) no
+   * existe todavía — usado al cargar un presupuesto o una venta con un
+   * nombre de cliente en texto libre, para que el maestro de Clientes se
+   * mantenga sincronizado sin pedirle un paso extra al usuario.
+   */
+  findOrCreateCliente: (nombre: string, userId: string) => Cliente
   addGastoFijo: (data: Omit<GastoFijo, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => GastoFijo
   addVariacion: (data: Omit<Variacion, 'idVar' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Variacion
   addAprendizaje: (data: Omit<Aprendizaje, 'idApr' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Aprendizaje
@@ -224,6 +231,13 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     return nuevo
   }
 
+  const findOrCreateCliente: PorteDataContextType['findOrCreateCliente'] = (nombre, userId) => {
+    const nombreTrim = nombre.trim()
+    const existente = clientes.find(c => c.nombre.trim().toLowerCase() === nombreTrim.toLowerCase())
+    if (existente) return existente
+    return addCliente({ nombre: nombreTrim, contacto: '', telefono: '' }, userId)
+  }
+
   const addGastoFijo: PorteDataContextType['addGastoFijo'] = (data, userId) => {
     const now = new Date().toISOString()
     const nuevo: GastoFijo = { ...data, id: crypto.randomUUID(), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
@@ -374,7 +388,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       value={{
         isLoading,
         ingresos, egresos, presupuestos, ventas, proveedores, clientes, gastosFijos, variaciones, aprendizajes,
-        addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addCliente, addGastoFijo, addVariacion, addAprendizaje,
+        addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addCliente, findOrCreateCliente, addGastoFijo, addVariacion, addAprendizaje,
         updateIngreso, updateEgreso, updatePresupuesto, updateVenta, updateProveedor, updateCliente, updateGastoFijo, updateVariacion, updateAprendizaje,
         nextPresupuestoId,
         aceptarPresupuesto,

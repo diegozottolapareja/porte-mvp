@@ -16,7 +16,7 @@ interface VentaDialogProps {
 // Alta manual de una venta — no todas nacen de un presupuesto aceptado.
 export function VentaDialog({ open, onClose, editing }: VentaDialogProps) {
   const { user } = useAuth()
-  const { addVenta, updateVenta, nextPresupuestoId } = usePorteData()
+  const { addVenta, updateVenta, nextPresupuestoId, findOrCreateCliente } = usePorteData()
 
   const [cliente, setCliente] = useState(editing?.cliente ?? '')
   const [ventaFinal, setVentaFinal] = useState(editing?.ventaFinal?.toString() ?? '')
@@ -52,6 +52,8 @@ export function VentaDialog({ open, onClose, editing }: VentaDialogProps) {
       toast.error(`${costoNegativo[0]} no puede ser negativo`)
       return
     }
+    findOrCreateCliente(cliente, user.id)
+
     const montoTotal = Number(mater) + Number(mo) + Number(indVend) + Number(imp) + Number(comerc) + Number(benef)
     const payload = {
       cliente,
