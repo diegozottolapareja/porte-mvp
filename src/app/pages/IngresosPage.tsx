@@ -22,7 +22,7 @@ const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 export default function IngresosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { ingresos, updateIngreso, softDeleteIngreso } = usePorteData()
+  const { ingresos, ventas, updateIngreso, softDeleteIngreso } = usePorteData()
   const [pendingDelete, setPendingDelete] = useState<Ingreso | null>(null)
   const activos = ingresos.filter(i => i.activo)
   const puedeEditar = can('ingresos:write')
@@ -76,6 +76,7 @@ export default function IngresosPage() {
               }
               fields={[
                 { label: 'Monto', value: formatCurrency(ingreso.monto), highlight: true },
+                { label: 'Cliente', value: ventas.find(v => v.id === ingreso.id)?.cliente ?? '—' },
                 { label: 'Cuenta', value: ingreso.cuenta },
               ]}
               actions={

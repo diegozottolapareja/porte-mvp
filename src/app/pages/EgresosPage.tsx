@@ -23,7 +23,7 @@ const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 export default function EgresosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { egresos, updateEgreso, softDeleteEgreso } = usePorteData()
+  const { egresos, ventas, updateEgreso, softDeleteEgreso } = usePorteData()
   const [pendingDelete, setPendingDelete] = useState<Egreso | null>(null)
   const activos = egresos.filter(e => e.activo)
   const puedeEditar = can('egresos:write')
@@ -81,6 +81,7 @@ export default function EgresosPage() {
               }
               fields={[
                 { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true },
+                { label: 'Cliente', value: egreso.id ? (ventas.find(v => v.id === egreso.id)?.cliente ?? '—') : 'Gasto fijo' },
                 { label: 'Cuenta', value: egreso.cuenta },
                 ...(egreso.fechaAcreditacion ? [{ label: 'Acreditación', value: formatDate(egreso.fechaAcreditacion) }] : []),
               ]}
