@@ -80,10 +80,10 @@ export default function EgresosPage() {
                 )
               }
               fields={[
-                { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true },
-                { label: 'Cliente', value: egreso.id ? (ventas.find(v => v.id === egreso.id)?.cliente ?? '—') : 'Gasto fijo' },
-                { label: 'Cuenta', value: egreso.cuenta },
-                ...(egreso.fechaAcreditacion ? [{ label: 'Acreditación', value: formatDate(egreso.fechaAcreditacion) }] : []),
+                { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true, row: 1 },
+                { label: 'Cliente', value: egreso.id ? (ventas.find(v => v.id === egreso.id)?.cliente ?? '—') : 'Gasto fijo', align: 'right', row: 1 },
+                { label: 'Cuenta', value: egreso.cuenta, align: 'right', row: 2 },
+                ...(egreso.fechaAcreditacion ? [{ label: 'Acreditación', value: formatDate(egreso.fechaAcreditacion), align: 'right' as const, row: 3 }] : []),
               ]}
               actions={
                 (puedeEditar || puedeEliminar) && (

@@ -75,9 +75,9 @@ export default function IngresosPage() {
                 )
               }
               fields={[
-                { label: 'Monto', value: formatCurrency(ingreso.monto), highlight: true },
-                { label: 'Cliente', value: ventas.find(v => v.id === ingreso.id)?.cliente ?? '—' },
-                { label: 'Cuenta', value: ingreso.cuenta },
+                { label: 'Monto', value: formatCurrency(ingreso.monto), highlight: true, row: 1 },
+                { label: 'Cliente', value: ventas.find(v => v.id === ingreso.id)?.cliente ?? '—', align: 'right', row: 1 },
+                { label: 'Cuenta', value: ingreso.cuenta, align: 'right', row: 2 },
               ]}
               actions={
                 (puedeEditar || puedeEliminar) && (
