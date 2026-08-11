@@ -63,7 +63,7 @@ export const rolesConfig: Record<string, RoleConfig> = {
       'variaciones:read', 'variaciones:write', 'variaciones:delete',
       'aprendizajes:read', 'aprendizajes:write', 'aprendizajes:delete',
     ],
-    modules: ['carga', 'ventas', 'ingresos', 'egresos', 'proveedores', 'clientes', 'gastosfijos', 'variaciones', 'aprendizajes', 'profile'],
+    modules: ['asistente', 'carga', 'ventas', 'ingresos', 'egresos', 'proveedores', 'clientes', 'gastosfijos', 'variaciones', 'aprendizajes', 'profile'],
     defaultRoute: '/carga',
   },
 }

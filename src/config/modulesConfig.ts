@@ -10,6 +10,7 @@ export interface ModuleConfig {
 
 export const modulesConfig: ModuleConfig[] = [
   { id: 'dashboard',    label: 'Dashboard',     description: 'Panel con ventas activas y estado de cobros',         enabled: true, path: '/dashboard' },
+  { id: 'asistente',    label: 'Asistente',     description: 'Chat con el asistente para cargar presupuestos por texto o voz', enabled: true, path: '/asistente' },
   { id: 'carga',        label: 'Carga rápida',  description: 'Carga rápida de ingresos, egresos y presupuestos',    enabled: true, path: '/carga' },
   { id: 'presupuestos', label: 'Presupuestos',  description: 'Embudo comercial',                                    enabled: true, path: '/presupuestos' },
   { id: 'ventas',       label: 'Ventas',        description: 'Ventas y ficha de venta',                             enabled: true, path: '/ventas' },

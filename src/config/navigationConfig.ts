@@ -54,6 +54,7 @@ const MAIN_ITEMS: Record<string, NavItem[]> = {
 
 // Accesos — comunes a ambos roles, tampoco son módulos de negocio.
 const ACCESS_ITEMS: NavItem[] = [
+  { id: 'asistente',     label: 'Asistente', icon: 'Bot',  path: '/asistente',     moduleId: 'asistente' },
   { id: 'mis-registros', label: 'Registros', icon: 'List', path: '/mis-registros', moduleId: 'carga' },
   { id: 'profile',       label: 'Perfil',    icon: 'User', path: '/profile',       moduleId: 'profile' },
 ]

@@ -18,6 +18,7 @@ import Settings from './pages/Settings'
 
 // PORTE — Dashboard & carga rápida
 import DashboardPage from './pages/DashboardPage'
+import AsistentePage from './pages/AsistentePage'
 import CargaRapidaPage from './pages/CargaRapidaPage'
 import MisRegistrosPage from './pages/MisRegistrosPage'
 
@@ -109,6 +110,7 @@ export default function App() {
             <Route path="/config" element={<PrivateRoute allowedRoles={['admin']}><ConfigPage /></PrivateRoute>} />
 
             {/* Shared */}
+            <Route path="/asistente" element={<PrivateRoute><AsistentePage /></PrivateRoute>} />
             <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
             <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
             <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />

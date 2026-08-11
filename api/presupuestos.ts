@@ -6,8 +6,9 @@ export const config = {
 
 // Mantener sincronizado con src/modules/porte/data/config.ts (CONFIG_LISTS).
 // Se duplica acá porque las Edge Functions de /api se bundlean por separado
-// y no comparten módulos con src/.
-const CATEGORIA = ['PORTON', 'CORTINA', 'ESTRUCTURA', 'FRENTE ASADOR', 'SERVICIO', 'OTRO'];
+// y no comparten módulos con src/. Se exporta para que api/_lib/assistantTools.ts
+// (dentro del mismo bundle de /api) no vuelva a duplicarla.
+export const CATEGORIA = ['PORTON', 'CORTINA', 'ESTRUCTURA', 'FRENTE ASADOR', 'SERVICIO', 'OTRO'];
 const ESTADO_COMERCIAL = ['Pedido', 'En presupuestación', 'Enviado', 'En negociación', 'Aceptado', 'Rechazado', 'Represupuestado', 'Cancelado'];
 const RESPONSABLE_DEFAULT = 'Gonza';
 
@@ -86,6 +87,9 @@ export default async function handler(request: Request) {
   const responsable = typeof body.responsable === 'string' && body.responsable.trim() ? body.responsable.trim() : RESPONSABLE_DEFAULT;
   const estadoComercial = typeof body.estadoComercial === 'string' && body.estadoComercial ? body.estadoComercial : 'Pedido';
   const observaciones = typeof body.observaciones === 'string' ? body.observaciones.trim() : undefined;
+  // Presente cuando el caller conoce al usuario real (ej. el Action Executor del
+  // asistente); el bot de Telegram no lo manda y el presupuesto queda sin dueño, como antes.
+  const createdBy = typeof body.createdBy === 'string' && body.createdBy ? body.createdBy : null;
 
   // costoMat y costoMo son obligatorios; el resto de los montos son opcionales (default 0).
   const costoMat = typeof body.costoMat === 'number' ? body.costoMat : Number(body.costoMat);
@@ -183,7 +187,7 @@ export default async function handler(request: Request) {
         observaciones: observaciones || null,
         enviado: false,
         activo: true,
-        created_by: null,
+        created_by: createdBy,
       })
       .select('id, fecha, cliente, descripcion, categoria, responsable, estado_comercial, costo_mat, costo_mo, ind_vendidos, impuestos, comercial, beneficio, monto_total')
       .single();
