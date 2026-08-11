@@ -64,6 +64,7 @@ export default function EgresosPage() {
             <EntityCard
               title={egreso.tipoEgreso}
               subtitle={`${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
+              onClick={egreso.id ? () => navigate(`/ventas/${encodeURIComponent(egreso.id!)}`) : undefined}
               statusNode={
                 puedeEditar ? (
                   <PillSelect

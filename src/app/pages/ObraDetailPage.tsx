@@ -163,10 +163,19 @@ export default function ObraDetailPage() {
           </TabsContent>
 
           <TabsContent value="ingresos" className="space-y-3 mt-4">
+            <PermissionGuard permission="ingresos:write">
+              <button onClick={() => navigate(`/ingresos/nuevo?obraId=${encodeURIComponent(venta.id)}`)} className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-border rounded-2xl text-sm text-muted-foreground">
+                <Plus className="w-4 h-4" /> Registrar ingreso
+              </button>
+            </PermissionGuard>
             {ingresosObra.length === 0
               ? <EmptyState Icon={ClipboardList} title="Sin ingresos" description="Todavía no se registraron cobros para esta obra." />
               : ingresosObra.map(i => (
-                <div key={i.ref} className="bg-white rounded-2xl border border-border p-4 flex items-center justify-between">
+                <div
+                  key={i.ref}
+                  className="bg-white rounded-2xl border border-border p-4 flex items-center justify-between cursor-pointer"
+                  onClick={() => navigate(`/ingresos/nuevo?ref=${encodeURIComponent(i.ref)}&obraId=${encodeURIComponent(venta.id)}`)}
+                >
                   <div>
                     <p className="font-medium text-sm">{i.concepto}</p>
                     <p className="text-xs text-muted-foreground">{formatDate(i.fecha)} · {i.cuenta}</p>
@@ -177,10 +186,19 @@ export default function ObraDetailPage() {
           </TabsContent>
 
           <TabsContent value="egresos" className="space-y-3 mt-4">
+            <PermissionGuard permission="egresos:write">
+              <button onClick={() => navigate(`/egresos/nuevo?obraId=${encodeURIComponent(venta.id)}`)} className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-border rounded-2xl text-sm text-muted-foreground">
+                <Plus className="w-4 h-4" /> Registrar egreso
+              </button>
+            </PermissionGuard>
             {egresosObra.length === 0
               ? <EmptyState Icon={ClipboardList} title="Sin egresos" description="Todavía no se registraron pagos para esta obra." />
               : egresosObra.map(e => (
-                <div key={e.ref} className="bg-white rounded-2xl border border-border p-4 flex items-center justify-between">
+                <div
+                  key={e.ref}
+                  className="bg-white rounded-2xl border border-border p-4 flex items-center justify-between cursor-pointer"
+                  onClick={() => navigate(`/egresos/nuevo?ref=${encodeURIComponent(e.ref)}&obraId=${encodeURIComponent(venta.id)}`)}
+                >
                   <div>
                     <p className="font-medium text-sm">{e.tipoEgreso}</p>
                     <p className="text-xs text-muted-foreground">{formatDate(e.fecha)} · {e.cuenta}</p>

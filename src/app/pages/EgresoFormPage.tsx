@@ -16,10 +16,13 @@ export default function EgresoFormPage() {
   const { ventas, proveedores, egresos, addEgreso, updateEgreso, removeEgreso, findDuplicateEgreso } = usePorteData()
   const [searchParams] = useSearchParams()
   const editRef = searchParams.get('ref')
+  const obraIdParam = searchParams.get('obraId')
   const editing = editRef ? egresos.find(e => e.ref === editRef) : undefined
+  // Si viene desde la ficha de venta, guardar tiene que volver ahí para ver el egreso listado.
+  const volverA = obraIdParam ? `/ventas/${encodeURIComponent(obraIdParam)}` : undefined
 
   const [fecha, setFecha] = useState(editing?.fecha ?? todayLocal())
-  const [obraId, setObraId] = useState(editing?.id ?? '')
+  const [obraId, setObraId] = useState(editing?.id ?? obraIdParam ?? '')
   const [proveedorId, setProveedorId] = useState(editing?.proveedor ?? '')
   const [tipoEgreso, setTipoEgreso] = useState<TipoEgreso>(editing?.tipoEgreso ?? 'MATERIALES')
   const [categoria, setCategoria] = useState<string>(editing?.categoria ?? CONFIG_LISTS.CATEG_DIRECTOS[0])
@@ -49,7 +52,7 @@ export default function EgresoFormPage() {
       updateEgreso(editing.ref, payload)
       // TODO: reemplazar con api.put(`/egresos/${editing.ref}`, payload)
       toast.success('Egreso actualizado')
-      navigate('/mis-registros')
+      navigate(volverA ?? '/mis-registros')
       return
     }
 
@@ -64,7 +67,7 @@ export default function EgresoFormPage() {
     if (loadAnother) {
       setMonto('')
     } else {
-      navigate('/carga')
+      navigate(volverA ?? '/carga')
     }
   }
 

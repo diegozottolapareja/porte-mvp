@@ -16,10 +16,13 @@ export default function IngresoFormPage() {
   const { ventas, ingresos, addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso } = usePorteData()
   const [searchParams] = useSearchParams()
   const editRef = searchParams.get('ref')
+  const obraIdParam = searchParams.get('obraId')
   const editing = editRef ? ingresos.find(i => i.ref === editRef) : undefined
+  // Si viene desde la ficha de venta, guardar tiene que volver ahí para ver el ingreso listado.
+  const volverA = obraIdParam ? `/ventas/${encodeURIComponent(obraIdParam)}` : undefined
 
   const [fecha, setFecha] = useState(editing?.fecha ?? todayLocal())
-  const [obraId, setObraId] = useState(editing?.id ?? '')
+  const [obraId, setObraId] = useState(editing?.id ?? obraIdParam ?? '')
   const [tipoIngreso, setTipoIngreso] = useState<TipoIngreso>(editing?.tipoIngreso ?? 'ANTICIPO')
   const [concepto, setConcepto] = useState(editing?.concepto ?? '')
   const [monto, setMonto] = useState(editing?.monto.toString() ?? '')
@@ -37,7 +40,7 @@ export default function IngresoFormPage() {
       updateIngreso(editing.ref, { fecha, id: obraId, tipoIngreso, concepto, monto: montoNum, cuenta, caja })
       // TODO: reemplazar con api.put(`/ingresos/${editing.ref}`, { ... })
       toast.success('Ingreso actualizado')
-      navigate('/mis-registros')
+      navigate(volverA ?? '/mis-registros')
       return
     }
 
@@ -55,7 +58,7 @@ export default function IngresoFormPage() {
       setConcepto('')
       setMonto('')
     } else {
-      navigate('/carga')
+      navigate(volverA ?? '/carga')
     }
   }
 
