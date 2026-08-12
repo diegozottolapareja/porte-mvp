@@ -9,6 +9,7 @@ import { AppHeader } from './AppHeader'
 import { AdminMenu } from './AdminMenu'
 import { UserAvatar } from './UserAvatar'
 import { PorteNav } from './PorteNav'
+import { AssistantFab } from './AssistantFab'
 import { NAV_ICONS } from './iconMap'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { getNavGroups } from '@/config/navigationConfig'
@@ -187,6 +188,8 @@ export function AppShell({ title, actions, detailPanel, onBack, narrow, children
           <PorteNav />
         </div>
       </SidebarInset>
+
+      <AssistantFab />
     </SidebarProvider>
   )
 }

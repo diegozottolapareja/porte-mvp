@@ -54,7 +54,7 @@ const MAIN_ITEMS: Record<string, NavItem[]> = {
 
 // Accesos — comunes a ambos roles, tampoco son módulos de negocio.
 const ACCESS_ITEMS: NavItem[] = [
-  { id: 'asistente',     label: 'Asistente', icon: 'Bot',  path: '/asistente',     moduleId: 'asistente' },
+  { id: 'asistente',     label: 'Asistente', icon: 'Mic',  path: '/asistente',     moduleId: 'asistente' },
   { id: 'mis-registros', label: 'Registros', icon: 'List', path: '/mis-registros', moduleId: 'carga' },
   { id: 'profile',       label: 'Perfil',    icon: 'User', path: '/profile',       moduleId: 'profile' },
 ]
@@ -75,11 +75,13 @@ export function getNavGroups(role: string): NavGroup[] {
   return groups
 }
 
-// Accesos priorizados por rol para el BottomNav móvil (máx. 4-5) — el resto
-// (incluidos los 8 módulos que no entran) se agrupa detrás de "Más".
+// Accesos priorizados por rol para el BottomNav móvil (máx. 5) — el resto
+// (incluidos los 8 módulos que no entran) se agrupa detrás de "Más". El
+// asistente va siempre último (extremo derecho), es el punto de entrada
+// rápido al micrófono.
 const MOBILE_PRIORITY: Record<string, string[]> = {
-  admin: ['dashboard', 'presupuestos', 'ventas', 'profile'],
-  dataEntry: ['carga', 'ventas', 'presupuestos', 'profile'],
+  admin: ['dashboard', 'presupuestos', 'ventas', 'profile', 'asistente'],
+  dataEntry: ['carga', 'ventas', 'presupuestos', 'profile', 'asistente'],
 }
 
 function allItems(role: string): NavItem[] {
