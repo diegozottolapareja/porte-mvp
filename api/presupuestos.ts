@@ -26,16 +26,6 @@ function nextSeqId(prefix: string, ids: string[]): string {
   return `${prefix}-${String(max + 1).padStart(4, '0')}`;
 }
 
-// presupuestos y ventas comparten el mismo espacio de IDs (PR-XXXX) — ver
-// nextPresupuestoId en src/modules/porte/store.tsx.
-function nextPresupuestoId(presupuestoIds: string[], ventaIds: string[]): string {
-  const max = [...presupuestoIds, ...ventaIds].reduce((acc, id) => {
-    const n = Number(id.replace('PR - ', '').replace('PR-', ''));
-    return Number.isFinite(n) ? Math.max(acc, n) : acc;
-  }, 0);
-  return `PR - ${String(max + 1).padStart(4, '0')}`;
-}
-
 export default async function handler(request: Request) {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -81,79 +71,80 @@ export default async function handler(request: Request) {
     });
   }
 
-  const cliente = typeof body.cliente === 'string' ? body.cliente.trim() : '';
-  const categoria = typeof body.categoria === 'string' ? body.categoria.toUpperCase() : '';
-  const descripcion = typeof body.descripcion === 'string' ? body.descripcion.trim() : '';
-  const responsable = typeof body.responsable === 'string' && body.responsable.trim() ? body.responsable.trim() : RESPONSABLE_DEFAULT;
-  const estadoComercial = typeof body.estadoComercial === 'string' && body.estadoComercial ? body.estadoComercial : 'Pedido';
-  const observaciones = typeof body.observaciones === 'string' ? body.observaciones.trim() : undefined;
+  const jsonError = (error: string, status = 400) =>
+    new Response(JSON.stringify({ success: false, error }), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  // Lote (budget_group del asistente) via { items: [...] }; caso normal es un objeto plano.
+  const rawItems = Array.isArray(body.items) ? (body.items as Record<string, unknown>[]) : [body];
+  if (rawItems.length === 0) return jsonError('"items" no puede estar vacío');
+
+  const parsed: {
+    cliente: string; categoria: string; descripcion: string; responsable: string; estadoComercial: string;
+    observaciones?: string; costoMat: number; costoMo: number; indVendidos?: number; impuestos?: number;
+    comercial?: number; beneficio?: number;
+  }[] = [];
+
+  for (const item of rawItems) {
+    const cliente = typeof item.cliente === 'string' ? item.cliente.trim() : '';
+    const categoria = typeof item.categoria === 'string' ? item.categoria.toUpperCase() : '';
+    const descripcion = typeof item.descripcion === 'string' ? item.descripcion.trim() : '';
+    const responsable = typeof item.responsable === 'string' && item.responsable.trim() ? item.responsable.trim() : RESPONSABLE_DEFAULT;
+    const estadoComercial = typeof item.estadoComercial === 'string' && item.estadoComercial ? item.estadoComercial : 'Pedido';
+    const observaciones = typeof item.observaciones === 'string' ? item.observaciones.trim() : undefined;
+    const costoMat = typeof item.costoMat === 'number' ? item.costoMat : Number(item.costoMat);
+    const costoMo = typeof item.costoMo === 'number' ? item.costoMo : Number(item.costoMo);
+    const indVendidos = numOrUndefined(item.indVendidos);
+    const impuestos = numOrUndefined(item.impuestos);
+    const comercial = numOrUndefined(item.comercial);
+    const beneficio = numOrUndefined(item.beneficio);
+
+    if (!cliente) return jsonError('Falta el campo "cliente"');
+    if (!CATEGORIA.includes(categoria)) return jsonError(`"categoria" debe ser una de: ${CATEGORIA.join(', ')}`);
+    if (!ESTADO_COMERCIAL.includes(estadoComercial)) return jsonError(`"estadoComercial" debe ser una de: ${ESTADO_COMERCIAL.join(', ')}`);
+    if (!Number.isFinite(costoMat)) return jsonError('Falta el campo "costoMat" (numérico)');
+    if (!Number.isFinite(costoMo)) return jsonError('Falta el campo "costoMo" (numérico)');
+
+    parsed.push({
+      cliente, categoria, descripcion, responsable, estadoComercial, observaciones,
+      costoMat, costoMo, indVendidos, impuestos, comercial, beneficio,
+    });
+  }
+
   // Presente cuando el caller conoce al usuario real (ej. el Action Executor del
   // asistente); el bot de Telegram no lo manda y el presupuesto queda sin dueño, como antes.
   const createdBy = typeof body.createdBy === 'string' && body.createdBy ? body.createdBy : null;
 
-  // costoMat y costoMo son obligatorios; el resto de los montos son opcionales (default 0).
-  const costoMat = typeof body.costoMat === 'number' ? body.costoMat : Number(body.costoMat);
-  const costoMo = typeof body.costoMo === 'number' ? body.costoMo : Number(body.costoMo);
-  const indVendidos = numOrUndefined(body.indVendidos);
-  const impuestos = numOrUndefined(body.impuestos);
-  const comercial = numOrUndefined(body.comercial);
-  const beneficio = numOrUndefined(body.beneficio);
-
-  if (!cliente) {
-    return new Response(JSON.stringify({ success: false, error: 'Falta el campo "cliente"' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-  if (!CATEGORIA.includes(categoria)) {
-    return new Response(
-      JSON.stringify({ success: false, error: `"categoria" debe ser una de: ${CATEGORIA.join(', ')}` }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    );
-  }
-  if (!ESTADO_COMERCIAL.includes(estadoComercial)) {
-    return new Response(
-      JSON.stringify({ success: false, error: `"estadoComercial" debe ser una de: ${ESTADO_COMERCIAL.join(', ')}` }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    );
-  }
-  if (!Number.isFinite(costoMat)) {
-    return new Response(JSON.stringify({ success: false, error: 'Falta el campo "costoMat" (numérico)' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-  if (!Number.isFinite(costoMo)) {
-    return new Response(JSON.stringify({ success: false, error: 'Falta el campo "costoMo" (numérico)' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
   try {
-    // 1. findOrCreateCliente — misma lógica que el formulario web (match case-insensitive por nombre)
+    // 1. findOrCreateCliente para todos los clientes del lote — misma lógica que el
+    // formulario web (match case-insensitive por nombre), sin crear duplicados.
     const { data: clientesExistentes, error: clientesError } = await supabase
       .from('clientes')
       .select('id_cli, nombre');
     if (clientesError) throw new Error(`Error leyendo clientes: ${clientesError.message}`);
 
-    const clienteExistente = (clientesExistentes ?? []).find(
-      (c) => c.nombre.trim().toLowerCase() === cliente.toLowerCase(),
-    );
-
-    if (!clienteExistente) {
-      const idCli = nextSeqId('CLI', (clientesExistentes ?? []).map((c) => c.id_cli));
-      const { error: insertClienteError } = await supabase.from('clientes').insert({
-        id_cli: idCli,
-        nombre: cliente,
-        activo: true,
-      });
-      if (insertClienteError) throw new Error(`Error creando cliente: ${insertClienteError.message}`);
+    const clientesIds = (clientesExistentes ?? []).map((c) => c.id_cli);
+    const nombresConocidos = new Set((clientesExistentes ?? []).map((c) => c.nombre.trim().toLowerCase()));
+    const clientesNuevos: { id_cli: string; nombre: string; activo: boolean }[] = [];
+    for (const item of parsed) {
+      const key = item.cliente.toLowerCase();
+      if (!nombresConocidos.has(key)) {
+        const idCli = nextSeqId('CLI', [...clientesIds, ...clientesNuevos.map((c) => c.id_cli)]);
+        clientesNuevos.push({ id_cli: idCli, nombre: item.cliente, activo: true });
+        nombresConocidos.add(key);
+      }
+    }
+    if (clientesNuevos.length > 0) {
+      const { error: insertClientesError } = await supabase.from('clientes').insert(clientesNuevos);
+      if (insertClientesError) throw new Error(`Error creando clientes: ${insertClientesError.message}`);
     }
 
-    // 2. Calcular próximo ID de presupuesto (comparte numeración con ventas)
+    // 2. Calcular la secuencia de IDs de presupuesto una sola vez para todo el lote
+    // (comparte numeración con ventas) — evita colisiones entre ítems del mismo lote.
     const [{ data: presupuestosIds, error: presError }, { data: ventasIds, error: ventasError }] = await Promise.all([
       supabase.from('presupuestos').select('id'),
       supabase.from('ventas').select('id'),
@@ -161,47 +152,50 @@ export default async function handler(request: Request) {
     if (presError) throw new Error(`Error leyendo presupuestos: ${presError.message}`);
     if (ventasError) throw new Error(`Error leyendo ventas: ${ventasError.message}`);
 
-    const id = nextPresupuestoId(
-      (presupuestosIds ?? []).map((p) => p.id),
-      (ventasIds ?? []).map((v) => v.id),
-    );
+    let maxId = [...(presupuestosIds ?? []).map((p) => p.id), ...(ventasIds ?? []).map((v) => v.id)].reduce((acc, id) => {
+      const n = Number(id.replace('PR - ', '').replace('PR-', ''));
+      return Number.isFinite(n) ? Math.max(acc, n) : acc;
+    }, 0);
 
-    // 3. Insertar presupuesto
     const fecha = new Date().toISOString().slice(0, 10);
-    const { data: creado, error: insertError } = await supabase
-      .from('presupuestos')
-      .insert({
-        id,
+    const rows = parsed.map((item) => {
+      maxId += 1;
+      return {
+        id: `PR - ${String(maxId).padStart(4, '0')}`,
         fecha,
-        cliente,
-        descripcion: descripcion || null,
-        categoria,
-        responsable,
-        costo_mat: costoMat,
-        costo_mo: costoMo,
-        ind_vendidos: indVendidos ?? null,
-        impuestos: impuestos ?? null,
-        comercial: comercial ?? null,
-        beneficio: beneficio ?? null,
-        estado_comercial: estadoComercial,
-        observaciones: observaciones || null,
+        cliente: item.cliente,
+        descripcion: item.descripcion || null,
+        categoria: item.categoria,
+        responsable: item.responsable,
+        costo_mat: item.costoMat,
+        costo_mo: item.costoMo,
+        ind_vendidos: item.indVendidos ?? null,
+        impuestos: item.impuestos ?? null,
+        comercial: item.comercial ?? null,
+        beneficio: item.beneficio ?? null,
+        estado_comercial: item.estadoComercial,
+        observaciones: item.observaciones || null,
         enviado: false,
         activo: true,
         created_by: createdBy,
-      })
-      .select('id, fecha, cliente, descripcion, categoria, responsable, estado_comercial, costo_mat, costo_mo, ind_vendidos, impuestos, comercial, beneficio, monto_total')
-      .single();
+      };
+    });
+
+    // 3. Insertar todo el lote en un único statement — atómico a nivel de Postgres,
+    // no queda un lote a medio insertar si algo falla.
+    const { data: creados, error: insertError } = await supabase
+      .from('presupuestos')
+      .insert(rows)
+      .select('id, fecha, cliente, descripcion, categoria, responsable, estado_comercial, costo_mat, costo_mo, ind_vendidos, impuestos, comercial, beneficio, monto_total');
     if (insertError) throw new Error(`Error creando presupuesto: ${insertError.message}`);
 
-    return new Response(JSON.stringify({ success: true, presupuesto: creado }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    const isBatch = Array.isArray(body.items);
+    return new Response(
+      JSON.stringify(isBatch ? { success: true, presupuestos: creados } : { success: true, presupuesto: creados?.[0] }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Error desconocido';
-    return new Response(JSON.stringify({ success: false, error: message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonError(message, 500);
   }
 }

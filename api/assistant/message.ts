@@ -72,6 +72,9 @@ export default async function handler(request: Request) {
 
   try {
     let conversationId = body.conversationId;
+    let pendingExtraction: unknown = null;
+    let pendingExtractionType: string | null = null;
+
     if (!conversationId) {
       const { data: conversation, error } = await supabase
         .from('conversations')
@@ -80,9 +83,27 @@ export default async function handler(request: Request) {
         .single();
       if (error || !conversation) throw new Error(`Error creando conversación: ${error?.message}`);
       conversationId = conversation.id;
+    } else {
+      const { data: existing, error } = await supabase
+        .from('conversations')
+        .select('pending_extraction, pending_extraction_type')
+        .eq('id', conversationId)
+        .single();
+      if (error) throw new Error(`Error leyendo conversación: ${error.message}`);
+      pendingExtraction = existing?.pending_extraction ?? null;
+      pendingExtractionType = existing?.pending_extraction_type ?? null;
     }
 
     await supabase.from('conversation_messages').insert({ conversation_id: conversationId, role: 'user', content: text });
+
+    // Atajo determinístico: el botón "Cancelar" del frontend manda literalmente
+    // este texto — no hace falta gastar una llamada a OpenAI para resolverlo.
+    if (pendingExtraction && text.toLowerCase() === 'cancelar') {
+      await supabase.from('conversations').update({ pending_extraction: null, pending_extraction_type: null }).eq('id', conversationId);
+      const cancelText = 'Listo, cancelado. ¿Con qué seguimos?';
+      await supabase.from('conversation_messages').insert({ conversation_id: conversationId, role: 'assistant', content: cancelText });
+      return jsonResponse({ success: true, conversationId, message: cancelText }, 200);
+    }
 
     const { data: historyRows, error: historyError } = await supabase
       .from('conversation_messages')
@@ -94,6 +115,9 @@ export default async function handler(request: Request) {
 
     const messages: ChatCompletionMessage[] = [
       { role: 'system', content: SYSTEM_PROMPT },
+      ...(pendingExtraction
+        ? [{ role: 'system' as const, content: `Hay una extracción de un documento pendiente de confirmación (documentType: "${pendingExtractionType}"): ${JSON.stringify(pendingExtraction)}. Usá estos datos para completar la acción correspondiente en cuanto el usuario confirme o corrija algo.` }]
+        : []),
       ...(historyRows ?? []).map((row): ChatCompletionMessage => ({
         role: row.role === 'assistant' ? 'assistant' : 'user',
         content: row.content,
@@ -107,6 +131,7 @@ export default async function handler(request: Request) {
     let actionParams: Record<string, unknown> | undefined;
     let actionResult: unknown;
     let actionError: string | undefined;
+    let pendingCleared = false;
 
     const toolCall = choice.message.tool_calls?.[0];
     if (toolCall) {
@@ -121,11 +146,18 @@ export default async function handler(request: Request) {
       actionResult = result.data;
       actionError = result.error;
 
+      // Una vez que una acción de creación se ejecuta con éxito, la extracción
+      // pendiente quedó resuelta — se limpia para no volver a inyectarla.
+      if (result.ok && pendingExtraction) {
+        await supabase.from('conversations').update({ pending_extraction: null, pending_extraction_type: null }).eq('id', conversationId);
+        pendingCleared = true;
+      }
+
       messages.push(choice.message);
       messages.push({
         role: 'tool',
         tool_call_id: toolCall.id,
-        content: JSON.stringify(result.ok ? { success: true, presupuesto: result.data } : { success: false, error: result.error }),
+        content: JSON.stringify(result.ok ? { success: true, data: result.data } : { success: false, error: result.error }),
       });
 
       completion = await callOpenAI(messages);
@@ -150,6 +182,7 @@ export default async function handler(request: Request) {
         conversationId,
         message: assistantText,
         action: actionName ? { name: actionName, ok: !actionError, error: actionError } : undefined,
+        pendingAction: !!pendingExtraction && !pendingCleared,
       },
       200,
     );

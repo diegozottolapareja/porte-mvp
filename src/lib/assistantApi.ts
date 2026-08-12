@@ -5,12 +5,29 @@ export interface AssistantMessageResponse {
   conversationId?: string
   message?: string
   action?: { name: string; ok: boolean; error?: string }
+  pendingAction?: boolean
   error?: string
 }
 
 export interface TranscribeResponse {
   success: boolean
   text?: string
+  error?: string
+}
+
+export interface UploadFileResult {
+  name: string
+  size: number
+  documentType?: string
+  error?: string
+}
+
+export interface UploadAssistantFilesResponse {
+  success: boolean
+  conversationId?: string
+  message?: string
+  pendingAction?: boolean
+  files?: UploadFileResult[]
   error?: string
 }
 
@@ -48,6 +65,19 @@ export async function transcribeAudio(blob: Blob): Promise<TranscribeResponse> {
   const form = new FormData()
   form.append('audio', blob, 'audio.webm')
   const response = await authorizedFetch('/api/assistant/transcribe', {
+    method: 'POST',
+    body: form,
+  })
+  return response.json()
+}
+
+export async function uploadAssistantFiles(files: File[], conversationId?: string, text?: string): Promise<UploadAssistantFilesResponse> {
+  const form = new FormData()
+  files.forEach(file => form.append('files', file, file.name))
+  if (conversationId) form.append('conversationId', conversationId)
+  if (text) form.append('text', text)
+
+  const response = await authorizedFetch('/api/assistant/upload', {
     method: 'POST',
     body: form,
   })
