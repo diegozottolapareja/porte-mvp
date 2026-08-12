@@ -4,10 +4,11 @@ import { Mic, Square, X } from 'lucide-react'
 
 interface VoiceRecorderProps {
   onRecorded: (blob: Blob) => void
+  onRecordingChange?: (recording: boolean) => void
   disabled?: boolean
 }
 
-export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
+export function VoiceRecorder({ onRecorded, onRecordingChange, disabled }: VoiceRecorderProps) {
   const [recording, setRecording] = useState(false)
   const [seconds, setSeconds] = useState(0)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -45,6 +46,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
       mediaRecorderRef.current = recorder
       setSeconds(0)
       setRecording(true)
+      onRecordingChange?.(true)
       intervalRef.current = setInterval(() => setSeconds(s => s + 1), 1000)
     } catch {
       toast.error('No se pudo acceder al micrófono — revisá los permisos del navegador')
@@ -54,6 +56,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
   const stop = () => {
     mediaRecorderRef.current?.stop()
     setRecording(false)
+    onRecordingChange?.(false)
   }
 
   const cancel = () => {
@@ -63,17 +66,19 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
     }
     releaseStream()
     setRecording(false)
+    onRecordingChange?.(false)
   }
 
   if (recording) {
     const mm = String(Math.floor(seconds / 60)).padStart(2, '0')
     const ss = String(seconds % 60).padStart(2, '0')
     return (
-      <div className="flex items-center gap-2 shrink-0">
-        <span className="flex items-center gap-1.5 text-sm text-destructive tabular-nums">
+      <div className="flex items-center gap-2 flex-1">
+        <span className="flex items-center gap-1.5 text-sm text-destructive tabular-nums shrink-0">
           <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
           {mm}:{ss}
         </span>
+        <span className="flex-1" />
         <button type="button" onClick={cancel} aria-label="Cancelar grabación" className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
           <X className="w-4 h-4 text-muted-foreground" />
         </button>
