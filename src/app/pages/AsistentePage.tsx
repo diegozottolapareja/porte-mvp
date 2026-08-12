@@ -8,6 +8,7 @@ import { VoiceRecorder } from '@/components/assistant/VoiceRecorder'
 import { FileAttachButton } from '@/components/assistant/FileAttachButton'
 import { AttachmentPreview } from '@/components/assistant/AttachmentPreview'
 import { sendAssistantMessage, transcribeAudio, uploadAssistantFiles } from '@/lib/assistantApi'
+import { usePorteData } from '@/modules/porte/store'
 
 const WELCOME_MESSAGE: ChatMessageData = {
   id: 'welcome',
@@ -17,6 +18,7 @@ const WELCOME_MESSAGE: ChatMessageData = {
 
 export default function AsistentePage() {
   const navigate = useNavigate()
+  const { refetch } = usePorteData()
   const [messages, setMessages] = useState<ChatMessageData[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
@@ -50,8 +52,15 @@ export default function AsistentePage() {
       conversationIdRef.current = response.conversationId
       setMessages(prev => prev.map(m => (m.id === pendingId ? { ...m, content: response.message ?? '', pending: false, pendingAction: response.pendingAction } : m)))
 
-      if (response.action && !response.action.ok) {
-        toast.error(response.action.error ?? 'No se pudo ejecutar la acción')
+      if (response.action) {
+        if (response.action.ok) {
+          // La acción se ejecutó del lado del backend (service role), fuera del
+          // store — sin este refetch, el usuario solo vería el dato nuevo al
+          // recargar la página manualmente.
+          refetch()
+        } else {
+          toast.error(response.action.error ?? 'No se pudo ejecutar la acción')
+        }
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'

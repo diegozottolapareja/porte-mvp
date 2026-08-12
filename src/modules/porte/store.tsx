@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/app/contexts/AuthContext'
 import type { Ingreso } from './data/ingresos'
@@ -82,6 +82,14 @@ interface PorteDataContextType {
   updateVariacion: (idVar: string, data: Partial<Variacion>) => void
   updateAprendizaje: (idApr: string, data: Partial<Aprendizaje>) => void
 
+  /**
+   * Re-lee todas las tablas desde Supabase. Necesario después de mutaciones que
+   * pasan por afuera del store (ej. el asistente crea presupuestos/egresos/ingresos
+   * vía el backend con service role) — sin esto, el usuario ve el dato recién
+   * creado solo al recargar la página.
+   */
+  refetch: () => Promise<void>
+
   nextPresupuestoId: () => string
 
   /**
@@ -127,6 +135,38 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   const [variaciones, setVariaciones] = useState<Variacion[]>([])
   const [aprendizajes, setAprendizajes] = useState<Aprendizaje[]>([])
 
+  // Guarda contra setState después de un logout mientras un refetch está en
+  // vuelo — refetch() se expone al resto de la app (ej. el asistente) y ya no
+  // corre solo dentro del useEffect de abajo, así que no puede depender del
+  // closure `cancelled` de un solo montaje.
+  const authGuardRef = useRef(isAuthenticated)
+  useEffect(() => { authGuardRef.current = isAuthenticated }, [isAuthenticated])
+
+  const loadAll = useCallback(async () => {
+    const [ing, egr, pre, ven, prov, cli, gf, vcar, apr] = await Promise.all([
+      supabase.from('ingresos').select('*').order('created_at', { ascending: false }),
+      supabase.from('egresos').select('*').order('created_at', { ascending: false }),
+      supabase.from('presupuestos').select('*').order('created_at', { ascending: false }),
+      supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false }),
+      supabase.from('v_proveedores_saldo').select('*'),
+      supabase.from('clientes').select('*').order('created_at', { ascending: false }),
+      supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false }),
+      supabase.from('variaciones').select('*').order('created_at', { ascending: false }),
+      supabase.from('aprendizajes').select('*').order('created_at', { ascending: false }),
+    ])
+    if (!authGuardRef.current) return
+    if (ing.data) setIngresos(ing.data.map(rowToIngreso))
+    if (egr.data) setEgresos(egr.data.map(rowToEgreso))
+    if (pre.data) setPresupuestos(pre.data.map(rowToPresupuesto))
+    if (ven.data) setVentas(ven.data.map(rowToVenta))
+    if (prov.data) setProveedores(prov.data.map(rowToProveedor))
+    if (cli.data) setClientes(cli.data.map(rowToCliente))
+    if (gf.data) setGastosFijos(gf.data.map(rowToGastoFijo))
+    if (vcar.data) setVariaciones(vcar.data.map(rowToVariacion))
+    if (apr.data) setAprendizajes(apr.data.map(rowToAprendizaje))
+    setIsLoading(false)
+  }, [])
+
   useEffect(() => {
     if (!isAuthenticated) {
       setIngresos([]); setEgresos([]); setPresupuestos([]); setVentas([])
@@ -135,31 +175,6 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    let cancelled = false
-    async function loadAll() {
-      const [ing, egr, pre, ven, prov, cli, gf, vcar, apr] = await Promise.all([
-        supabase.from('ingresos').select('*').order('created_at', { ascending: false }),
-        supabase.from('egresos').select('*').order('created_at', { ascending: false }),
-        supabase.from('presupuestos').select('*').order('created_at', { ascending: false }),
-        supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false }),
-        supabase.from('v_proveedores_saldo').select('*'),
-        supabase.from('clientes').select('*').order('created_at', { ascending: false }),
-        supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false }),
-        supabase.from('variaciones').select('*').order('created_at', { ascending: false }),
-        supabase.from('aprendizajes').select('*').order('created_at', { ascending: false }),
-      ])
-      if (cancelled) return
-      if (ing.data) setIngresos(ing.data.map(rowToIngreso))
-      if (egr.data) setEgresos(egr.data.map(rowToEgreso))
-      if (pre.data) setPresupuestos(pre.data.map(rowToPresupuesto))
-      if (ven.data) setVentas(ven.data.map(rowToVenta))
-      if (prov.data) setProveedores(prov.data.map(rowToProveedor))
-      if (cli.data) setClientes(cli.data.map(rowToCliente))
-      if (gf.data) setGastosFijos(gf.data.map(rowToGastoFijo))
-      if (vcar.data) setVariaciones(vcar.data.map(rowToVariacion))
-      if (apr.data) setAprendizajes(apr.data.map(rowToAprendizaje))
-      setIsLoading(false)
-    }
     loadAll()
 
     // Re-fetch al volver a la pestaña: el store solo carga una vez al montar,
@@ -171,11 +186,10 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     window.addEventListener('focus', onVisible)
 
     return () => {
-      cancelled = true
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, loadAll])
 
   const addIngreso: PorteDataContextType['addIngreso'] = (data, userId) => {
     const now = new Date().toISOString()
@@ -390,6 +404,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
         ingresos, egresos, presupuestos, ventas, proveedores, clientes, gastosFijos, variaciones, aprendizajes,
         addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addCliente, findOrCreateCliente, addGastoFijo, addVariacion, addAprendizaje,
         updateIngreso, updateEgreso, updatePresupuesto, updateVenta, updateProveedor, updateCliente, updateGastoFijo, updateVariacion, updateAprendizaje,
+        refetch: loadAll,
         nextPresupuestoId,
         aceptarPresupuesto,
         removeIngreso, removeEgreso,
