@@ -88,33 +88,53 @@ export function validateIncome(data: ExtractedDocumentData): ValidationResult<In
 export interface PresupuestoPayload {
   cliente: string; categoria: string; descripcion?: string; costoMat: number; costoMo: number;
   indVendidos?: number; impuestos?: number; comercial?: number; beneficio?: number;
+  estadoComercial?: 'Incompleto';
 }
 
+// El cliente es el único dato que bloquea la creación — no se puede inventar un
+// nombre. El resto (categoría, costos) se completa con un default razonable y el
+// presupuesto se crea igual, marcado "Incompleto" para revisión manual después —
+// así nunca queda un presupuesto de un documento real sin cargar por falta de un
+// dato que el documento nunca iba a traer (ej. la categoría interna de Porte).
 export function validateBudget(data: ExtractedDocumentData): ValidationResult<PresupuestoPayload> {
-  const missingFields: string[] = [];
+  if (!data.cliente) return { ok: false, missingFields: ['cliente'], warnings: [] };
 
-  if (!data.cliente) missingFields.push('cliente');
-  if (!data.categoria || !CATEGORIA.includes(data.categoria.toUpperCase())) missingFields.push('categoria');
-  if (data.costoMat == null) missingFields.push('costoMat');
-  if (data.costoMo == null) missingFields.push('costoMo');
+  const defaulted: string[] = [];
 
-  if (missingFields.length > 0) return { ok: false, missingFields, warnings: [] };
+  let categoria = data.categoria?.toUpperCase();
+  if (!categoria || !CATEGORIA.includes(categoria)) {
+    categoria = 'OTRO';
+    defaulted.push('categoría (sin coincidencia en el documento, uso OTRO)');
+  }
+
+  let costoMat = data.costoMat;
+  if (costoMat == null) {
+    costoMat = 0;
+    defaulted.push('costo materiales (no encontrado, uso $0)');
+  }
+
+  let costoMo = data.costoMo;
+  if (costoMo == null) {
+    costoMo = 0;
+    defaulted.push('costo mano de obra (no encontrado, uso $0)');
+  }
 
   return {
     ok: true,
     payload: {
-      cliente: data.cliente!,
-      categoria: data.categoria!.toUpperCase(),
+      cliente: data.cliente,
+      categoria,
       descripcion: data.concepto ?? undefined,
-      costoMat: data.costoMat!,
-      costoMo: data.costoMo!,
+      costoMat,
+      costoMo,
       indVendidos: data.indVendidos ?? undefined,
       impuestos: data.impuestos ?? undefined,
       comercial: data.comercial ?? undefined,
       beneficio: data.beneficio ?? undefined,
+      estadoComercial: defaulted.length > 0 ? 'Incompleto' : undefined,
     },
     missingFields: [],
-    warnings: [],
+    warnings: defaulted,
   };
 }
 
@@ -134,5 +154,10 @@ export function validateBudgetGroup(documents: ExtractedDocumentData[]): Validat
     };
   }
 
-  return { ok: true, payload: results.map((r) => r.payload!), missingFields: [], warnings: [] };
+  return {
+    ok: true,
+    payload: results.map((r) => r.payload!),
+    missingFields: [],
+    warnings: results.flatMap((r, i) => (r.warnings.length > 0 ? [`presupuesto #${i + 1} (${r.payload!.cliente}): ${r.warnings.join('; ')}`] : [])),
+  };
 }

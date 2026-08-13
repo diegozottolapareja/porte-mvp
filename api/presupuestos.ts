@@ -9,7 +9,7 @@ export const config = {
 // y no comparten módulos con src/. Se exporta para que api/_lib/assistantTools.ts
 // (dentro del mismo bundle de /api) no vuelva a duplicarla.
 export const CATEGORIA = ['PORTON', 'CORTINA', 'ESTRUCTURA', 'FRENTE ASADOR', 'SERVICIO', 'OTRO'];
-const ESTADO_COMERCIAL = ['Pedido', 'En presupuestación', 'Enviado', 'En negociación', 'Aceptado', 'Rechazado', 'Represupuestado', 'Cancelado'];
+const ESTADO_COMERCIAL = ['Pedido', 'En presupuestación', 'Enviado', 'En negociación', 'Aceptado', 'Rechazado', 'Represupuestado', 'Cancelado', 'Incompleto'];
 const RESPONSABLE_DEFAULT = 'Gonza';
 
 function numOrUndefined(value: unknown): number | undefined {

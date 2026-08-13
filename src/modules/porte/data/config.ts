@@ -4,7 +4,7 @@
 
 export const CONFIG_LISTS = {
   CATEGORIA: ['PORTON', 'CORTINA', 'ESTRUCTURA', 'FRENTE ASADOR', 'SERVICIO', 'OTRO'],
-  ESTADO_COMERCIAL: ['Pedido', 'En presupuestación', 'Enviado', 'En negociación', 'Aceptado', 'Rechazado', 'Represupuestado', 'Cancelado'],
+  ESTADO_COMERCIAL: ['Pedido', 'En presupuestación', 'Enviado', 'En negociación', 'Aceptado', 'Rechazado', 'Represupuestado', 'Cancelado', 'Incompleto'],
   // Lista maestra oficial (00_CONFIG) tiene solo 4 valores, pero las ventas reales del
   // cliente usan además "Pendiente" y "Planificado" — inconsistencia real, no error de carga.
   ESTADO_OPERATIVO: ['Pendiente', 'Planificado', 'En fabricación', 'En montaje', 'Entregado', 'Cerrado'],
@@ -76,4 +76,5 @@ export const ESTADO_COMERCIAL_CONFIG: Record<EstadoComercial, { color: string; b
   Rechazado:              { color: 'text-red-700',    bgColor: 'bg-red-100'    },
   Represupuestado:        { color: 'text-amber-700',  bgColor: 'bg-amber-100'  },
   Cancelado:              { color: 'text-gray-600',   bgColor: 'bg-gray-100'   },
+  Incompleto:             { color: 'text-orange-700', bgColor: 'bg-orange-100' },
 }

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin';
 import { processDocument } from '../_lib/documentProcessingService';
-import { validateExpense, validateIncome, validateBudget, validateBudgetGroup } from '../_lib/documentValidation';
+import { validateExpense, validateIncome, validateBudget, validateBudgetGroup, type PresupuestoPayload } from '../_lib/documentValidation';
 import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/documentSchemas';
 
 // Runtime Node.js por defecto (sin `config.runtime = 'edge'`, igual que
@@ -10,7 +10,13 @@ import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/
 // resultado en `conversations.pending_extraction`. La confirmación por texto
 // o voz (api/assistant/message.ts) es la que dispara el Action Executor.
 
-const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+];
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 5;
 
@@ -58,28 +64,36 @@ function summarizeIncome(fileName: string, data: ExtractedDocumentData): { text:
   };
 }
 
-function summarizeBudget(fileName: string, data: ExtractedDocumentData): { text: string; ready: boolean } {
+function summarizeBudget(fileName: string, data: ExtractedDocumentData): { text: string; ready: boolean; payload?: PresupuestoPayload } {
   const validation = validateBudget(data);
   if (!validation.ok) {
-    return { text: `"${fileName}": parece un presupuesto, pero faltan datos: ${validation.missingFields.join(', ')}. ¿Me los pasás?`, ready: false };
+    return { text: `"${fileName}": no pude identificar el cliente en el documento — ese dato no lo puedo inventar, ¿me decís para quién es este presupuesto?`, ready: false };
   }
   const p = validation.payload!;
   const total = p.costoMat + p.costoMo + (p.indVendidos ?? 0) + (p.impuestos ?? 0) + (p.comercial ?? 0) + (p.beneficio ?? 0);
+  const incompleteNote = p.estadoComercial === 'Incompleto'
+    ? ` — ojo: ${validation.warnings.join('; ')}. Lo voy a marcar "Incompleto" para que lo revises después`
+    : '';
   return {
-    text: `"${fileName}": encontré un presupuesto para ${p.cliente} (${p.categoria}) por $${total.toLocaleString('es-AR')}. ¿Lo cargo?`,
+    text: `"${fileName}": encontré un presupuesto para ${p.cliente} (${p.categoria}) por $${total.toLocaleString('es-AR')}${incompleteNote}. ¿Lo cargo?`,
     ready: true,
+    payload: p,
   };
 }
 
-function summarizeBudgetGroup(fileName: string, documents: ExtractedDocumentData[]): { text: string; ready: boolean } {
+function summarizeBudgetGroup(fileName: string, documents: ExtractedDocumentData[]): { text: string; ready: boolean; payload?: PresupuestoPayload[] } {
   const validation = validateBudgetGroup(documents);
   if (!validation.ok) {
-    return { text: `"${fileName}": encontré varios presupuestos, pero algunos tienen datos faltantes: ${validation.missingFields.join(' / ')}. ¿Los revisamos?`, ready: false };
+    return { text: `"${fileName}": encontré varios presupuestos, pero a algunos no les pude identificar el cliente: ${validation.missingFields.join(' / ')}. ¿Los revisamos?`, ready: false };
   }
-  const total = validation.payload!.reduce((acc, p) => acc + p.costoMat + p.costoMo + (p.indVendidos ?? 0) + (p.impuestos ?? 0) + (p.comercial ?? 0) + (p.beneficio ?? 0), 0);
+  const payload = validation.payload!;
+  const total = payload.reduce((acc, p) => acc + p.costoMat + p.costoMo + (p.indVendidos ?? 0) + (p.impuestos ?? 0) + (p.comercial ?? 0) + (p.beneficio ?? 0), 0);
+  const incompletos = payload.filter((p) => p.estadoComercial === 'Incompleto').length;
+  const incompleteNote = incompletos > 0 ? ` (${incompletos} con datos que faltaban en el documento — quedan marcados "Incompleto" para revisar después)` : '';
   return {
-    text: `"${fileName}": encontré ${validation.payload!.length} presupuestos por un total de $${total.toLocaleString('es-AR')}. ¿Los importo todos?`,
+    text: `"${fileName}": encontré ${payload.length} presupuestos por un total de $${total.toLocaleString('es-AR')}${incompleteNote}. ¿Los importo todos?`,
     ready: true,
+    payload,
   };
 }
 
@@ -134,7 +148,7 @@ export default async function handler(request: Request) {
       const name = sanitizeFileName(file.name);
 
       if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-        summaries.push({ name, size: file.size, summary: `"${name}": tipo de archivo no soportado (${file.type || 'desconocido'}). Solo PDF, JPG o PNG.`, error: 'unsupported_type' });
+        summaries.push({ name, size: file.size, summary: `"${name}": tipo de archivo no soportado (${file.type || 'desconocido'}). Solo PDF, JPG, PNG, Excel (.xlsx) o Word (.docx).`, error: 'unsupported_type' });
         continue;
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -168,15 +182,26 @@ export default async function handler(request: Request) {
 
         let summaryLine: string;
         let ready = false;
+        // Para budget/budget_group, lo que va a pending_extraction es el payload ya
+        // validado y con defaults aplicados (validateBudget/validateBudgetGroup) —
+        // no el envelope crudo — así el modelo solo repite esos campos tal cual al
+        // llamar a la tool, sin tener que recalcular defaults por su cuenta.
+        let pendingData: unknown = envelope.documentType === 'budget_group' ? envelope.documents : envelope.data;
 
         if (envelope.documentType === 'expense' && envelope.data) {
           ({ text: summaryLine, ready } = summarizeExpense(name, envelope.data));
         } else if (envelope.documentType === 'income' && envelope.data) {
           ({ text: summaryLine, ready } = summarizeIncome(name, envelope.data));
         } else if (envelope.documentType === 'budget' && envelope.data) {
-          ({ text: summaryLine, ready } = summarizeBudget(name, envelope.data));
+          const result = summarizeBudget(name, envelope.data);
+          summaryLine = result.text;
+          ready = result.ready;
+          if (result.payload) pendingData = result.payload;
         } else if (envelope.documentType === 'budget_group' && envelope.documents) {
-          ({ text: summaryLine, ready } = summarizeBudgetGroup(name, envelope.documents));
+          const result = summarizeBudgetGroup(name, envelope.documents);
+          summaryLine = result.text;
+          ready = result.ready;
+          if (result.payload) pendingData = result.payload;
         } else {
           summaryLine = `"${name}": no pude identificar con seguridad qué tipo de documento es (confianza ${Math.round((envelope.confidence ?? 0) * 100)}%). ¿Es un egreso, un ingreso o un presupuesto?`;
         }
@@ -184,7 +209,7 @@ export default async function handler(request: Request) {
         summaries.push({ name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: summaryLine });
 
         if (!primary && envelope.documentType !== 'unknown') {
-          primary = { documentType: envelope.documentType, data: envelope.documentType === 'budget_group' ? envelope.documents : envelope.data, ready };
+          primary = { documentType: envelope.documentType, data: pendingData, ready };
         }
 
         await supabase.from('assistant_documents').insert({
