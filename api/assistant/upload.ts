@@ -1,14 +1,25 @@
-import { createHash } from 'node:crypto';
 import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin.js';
 import { processDocument } from '../_lib/documentProcessingService.js';
 import { validateExpense, validateIncome, validateBudget, validateBudgetGroup, type PresupuestoPayload } from '../_lib/documentValidation.js';
 import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/documentSchemas.js';
 
-// Runtime Node.js por defecto (sin `config.runtime = 'edge'`, igual que
-// api/presupuestos.ts) — necesita Buffer para el hash/base64 de los archivos.
+export const config = { runtime: 'edge' };
+
+// Runtime edge, igual que el resto de api/* — el handler recibe un Request/
+// Response de verdad (Web API). Con el runtime Node.js por defecto, el
+// handler(request: Request) de acá NUNCA recibió un Request real (Vercel
+// pasa su propio req con helpers de Node, sin .headers.get) — eso rompía
+// la autenticación en producción con "request.headers.get is not a
+// function", enmascarado antes por el bug de resolución de módulos ESM.
+//
 // Nunca ejecuta ninguna acción acá: clasifica, extrae, valida y deja el
 // resultado en `conversations.pending_extraction`. La confirmación por texto
 // o voz (api/assistant/message.ts) es la que dispara el Action Executor.
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -157,7 +168,7 @@ export default async function handler(request: Request) {
       }
 
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const fileHash = createHash('sha256').update(bytes).digest('hex');
+      const fileHash = await sha256Hex(bytes);
 
       try {
         const { data: cached } = await supabase
