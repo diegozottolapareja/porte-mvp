@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
-import { CondicionesComercialesForm } from '@/components/CondicionesComercialesForm'
-import { CONFIG_LISTS, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial, type CondicionesComerciales } from '@/modules/porte'
+import { CondicionesComercialesFields, CONDICIONES_COMERCIALES_DRAFT_VACIO, type CondicionesComercialesDraft } from '@/components/CondicionesComercialesFields'
+import { CONFIG_LISTS, validarCondicionesComerciales, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial, type CondicionPago, type TipoCaja } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, todayLocal } from '@/lib/format'
@@ -13,7 +13,7 @@ export default function PresupuestoFormPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { id } = useParams()
-  const { presupuestos, ventas, clientes, addPresupuesto, updatePresupuesto, aceptarPresupuesto, convertirEnVenta, nextPresupuestoId } = usePorteData()
+  const { presupuestos, ventas, clientes, addPresupuesto, updatePresupuesto, convertirEnVenta, nextPresupuestoId } = usePorteData()
   const existing = id ? presupuestos.find(p => p.id === decodeURIComponent(id)) : undefined
   const clientesActivos = clientes.filter(c => c.activo)
 
@@ -30,6 +30,7 @@ export default function PresupuestoFormPage() {
   const [estadoComercial, setEstadoComercial] = useState<EstadoComercial>(existing?.estadoComercial ?? 'Pedido')
   const [vencimiento, setVencimiento] = useState(existing?.vencimiento ?? '')
   const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
+  const [condiciones, setCondiciones] = useState<CondicionesComercialesDraft>(CONDICIONES_COMERCIALES_DRAFT_VACIO)
   const [convirtiendo, setConvirtiendo] = useState(false)
 
   const costoValues = [costoMat, costoMo, indVendidos, impuestos, comercial, beneficio]
@@ -38,7 +39,21 @@ export default function PresupuestoFormPage() {
     ? costoValues.reduce((sum, v) => sum + (v === '' ? 0 : Number(v)), 0)
     : undefined
 
-  const handleSave = () => {
+  // Un presupuesto ya convertido no puede volver a mutar en "Crear venta" —
+  // el único botón se comporta como guardado normal aunque siga Aceptado.
+  const yaConvertido = !!existing && presupuestoTieneVentaAsociada(existing.id, ventas)
+  // Requiere `existing`: la Venta tiene una FK contra presupuestos.id, así que
+  // no se puede convertir algo que todavía no se guardó en la base.
+  const modoCrearVenta = !!existing && estadoComercial === 'Aceptado' && !yaConvertido
+  const puedeConvertir = modoCrearVenta && !validarCondicionesComerciales({
+    condPago: condiciones.condPago || undefined,
+    vencCobro: condiciones.vencCobro || undefined,
+    cajaIntenc: condiciones.cajaIntenc || undefined,
+    entregaCompr: condiciones.entregaCompr || undefined,
+    respOp: condiciones.respOp || undefined,
+  })
+
+  const handlePrimaryAction = async () => {
     if (!cliente || !user) {
       toast.error('Elegí un cliente')
       return
@@ -83,43 +98,34 @@ export default function PresupuestoFormPage() {
       enviado: existing?.enviado ?? false,
     }
 
-    if (existing) {
-      const pasaAAceptado = existing.estadoComercial !== 'Aceptado' && estadoComercial === 'Aceptado'
-      const dejaDeEstarAceptado = existing.estadoComercial === 'Aceptado' && estadoComercial !== 'Aceptado'
-
-      if (pasaAAceptado) {
-        const resultado = aceptarPresupuesto(existing.id, payload)
-        // TODO: reemplazar con api.put(`/presupuestos/${existing.id}`, payload) — la transición vive en el backend
-        if (!resultado.ok) {
-          toast.error(resultado.error)
-          return
+    if (!modoCrearVenta) {
+      if (existing) {
+        const dejaDeEstarAceptado = existing.estadoComercial === 'Aceptado' && estadoComercial !== 'Aceptado'
+        if (dejaDeEstarAceptado && yaConvertido) {
+          toast.warning(`Este presupuesto ya generó una venta (${existing.id}). Cambiar el estado no la elimina; si fue un error, corregilo manualmente en Ventas.`)
         }
-        toast.success(`Presupuesto ${existing.id} aceptado — completá las condiciones comerciales para convertirlo en venta`)
-        return
+        updatePresupuesto(existing.id, payload)
+        toast.success('Presupuesto actualizado')
+      } else {
+        const nuevoId = nextPresupuestoId()
+        addPresupuesto({ id: nuevoId, fecha: todayLocal(), ...payload }, user.id)
+        toast.success(`Presupuesto ${nuevoId} creado`)
       }
-
-      if (dejaDeEstarAceptado && presupuestoTieneVentaAsociada(existing.id, ventas)) {
-        toast.warning(`Este presupuesto ya generó una venta (${existing.id}). Cambiar el estado no la elimina; si fue un error, corregilo manualmente en Ventas.`)
-      }
-
-      updatePresupuesto(existing.id, payload)
-      // TODO: reemplazar con api.put(`/presupuestos/${existing.id}`, payload)
-      toast.success('Presupuesto actualizado')
-    } else {
-      const nuevoId = nextPresupuestoId()
-      addPresupuesto({ id: nuevoId, fecha: todayLocal(), ...payload }, user.id)
-      // TODO: reemplazar con api.post('/presupuestos', { id: nuevoId, ...payload })
-      toast.success(`Presupuesto ${nuevoId} creado`)
+      navigate('/presupuestos')
+      return
     }
 
-    navigate('/presupuestos')
-  }
-
-  const handleConvertir = async (condiciones: CondicionesComerciales) => {
-    if (!existing || !user || convirtiendo) return
+    if (!existing || !puedeConvertir || convirtiendo) return
     setConvirtiendo(true)
     try {
-      const resultado = await convertirEnVenta(existing.id, condiciones, user.id)
+      const resultado = await convertirEnVenta(existing.id, {
+        condPago: condiciones.condPago as CondicionPago,
+        vencCobro: condiciones.vencCobro,
+        cajaIntenc: condiciones.cajaIntenc as TipoCaja,
+        entregaCompr: condiciones.entregaCompr,
+        respOp: condiciones.respOp.trim(),
+        dias: condiciones.dias === '' ? undefined : Number(condiciones.dias),
+      }, user.id, payload)
       if (!resultado.ok) {
         toast.error(resultado.error)
         return
@@ -130,10 +136,6 @@ export default function PresupuestoFormPage() {
       setConvirtiendo(false)
     }
   }
-
-  const mostrarCondicionesComerciales = !!existing
-    && existing.estadoComercial === 'Aceptado'
-    && !presupuestoTieneVentaAsociada(existing.id, ventas)
 
   // Si el presupuesto existente quedó con un cliente que ya no está activo
   // (baja posterior), lo mostramos igual para no pisarlo silenciosamente al guardar.
@@ -201,14 +203,18 @@ export default function PresupuestoFormPage() {
           </div>
         </Field>
 
+        {modoCrearVenta && <CondicionesComercialesFields value={condiciones} onChange={patch => setCondiciones(prev => ({ ...prev, ...patch }))} />}
+
         <Field label="Vencimiento"><input type="date" value={vencimiento} onChange={e => setVencimiento(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
         <Field label="Observaciones"><textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} rows={3} className="w-full px-4 py-3 rounded-2xl border border-border bg-white text-sm" /></Field>
 
-        <button onClick={handleSave} className="w-full py-4 bg-primary text-white rounded-2xl font-semibold text-sm lg:col-span-2">
-          Guardar presupuesto
+        <button
+          onClick={handlePrimaryAction}
+          disabled={modoCrearVenta && (!puedeConvertir || convirtiendo)}
+          className="w-full py-4 bg-primary text-white rounded-2xl font-semibold text-sm lg:col-span-2 disabled:opacity-40"
+        >
+          {modoCrearVenta ? (convirtiendo ? 'Creando venta...' : 'Crear venta') : 'Guardar presupuesto'}
         </button>
-
-        {mostrarCondicionesComerciales && <CondicionesComercialesForm onConvertir={handleConvertir} submitting={convirtiendo} />}
       </div>
     </AppShell>
   )

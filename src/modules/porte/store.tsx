@@ -105,18 +105,27 @@ interface PorteDataContextType {
   /**
    * Paso 2: crea la Venta congelando los costos del presupuesto + las
    * condiciones comerciales cargadas. Requiere que el presupuesto esté
-   * 'Aceptado' y que todavía no tenga una venta asociada (idempotente).
-   * Valida del lado del cliente para feedback inmediato — el trigger de la
-   * base (trg_validar_condiciones_comerciales) es la barrera real. A
-   * diferencia del resto de las mutaciones del store, espera la confirmación
-   * real de Supabase antes de tocar el estado local: es el único flujo donde
-   * una inserción puede fallar legítimamente (trigger o PK duplicada por
-   * doble submit) y un "éxito" optimista dejaría una venta fantasma.
+   * 'Aceptado' (ya sea porque ya lo estaba, o porque `overrides` lo marca así
+   * en el mismo llamado) y que todavía no tenga una venta asociada
+   * (idempotente). Valida del lado del cliente para feedback inmediato — el
+   * trigger de la base (trg_validar_condiciones_comerciales) es la barrera
+   * real. A diferencia del resto de las mutaciones del store, espera la
+   * confirmación real de Supabase antes de tocar el estado local: es el único
+   * flujo donde una inserción puede fallar legítimamente (trigger o PK
+   * duplicada por doble submit) y un "éxito" optimista dejaría una venta
+   * fantasma.
+   *
+   * `overrides`: cambios de edición del presupuesto todavía no guardados
+   * (típicamente incluye estadoComercial: 'Aceptado') que se aplican acá en
+   * memoria antes de validar/construir la venta, y se persisten recién si la
+   * venta se creó con éxito. Permite "Aceptar + Convertir" en un solo click
+   * sin encadenar dos llamadas al store (que verían estado stale entre sí).
    */
   convertirEnVenta: (
     presupuestoId: string,
     condiciones: CondicionesComerciales,
     userId: string,
+    overrides?: Partial<Presupuesto>,
   ) => Promise<{ ok: true; venta: Venta } | { ok: false; error: string }>
 
   removeIngreso: (ref: string) => void
@@ -328,9 +337,18 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     return { ok: true }
   }
 
-  const convertirEnVenta: PorteDataContextType['convertirEnVenta'] = async (presupuestoId, condiciones, userId) => {
-    const presupuesto = presupuestos.find(p => p.id === presupuestoId)
-    if (!presupuesto) return { ok: false, error: 'Presupuesto no encontrado' }
+  const convertirEnVenta: PorteDataContextType['convertirEnVenta'] = async (presupuestoId, condiciones, userId, overrides) => {
+    const presupuestoGuardado = presupuestos.find(p => p.id === presupuestoId)
+    if (!presupuestoGuardado) return { ok: false, error: 'Presupuesto no encontrado' }
+
+    // `overrides` permite aceptar y convertir en un solo paso: PresupuestoFormPage
+    // pasa acá los cambios de edición todavía no guardados (incluido
+    // estadoComercial: 'Aceptado') en vez de llamar primero a aceptarPresupuesto()
+    // y recién después a esto — encadenar esas dos llamadas del store leería acá
+    // el `presupuestos` de un render viejo (el setState de la primera no se
+    // refleja hasta el próximo render) y rechazaría la conversión igual.
+    const presupuesto = overrides ? { ...presupuestoGuardado, ...overrides } : presupuestoGuardado
+
     if (presupuesto.estadoComercial !== 'Aceptado') {
       return { ok: false, error: 'El presupuesto tiene que estar Aceptado antes de convertirlo en venta' }
     }
@@ -369,6 +387,15 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     if (error) {
       logPersistError('convertirEnVenta', error)
       return { ok: false, error: 'No se pudo guardar la venta. Intentá de nuevo.' }
+    }
+
+    // El presupuesto recién se marca Aceptado (+ el resto de los overrides) una
+    // vez que la venta ya se confirmó — si el insert de arriba hubiera fallado,
+    // el presupuesto queda como estaba en vez de mostrar "Aceptado" sin venta.
+    if (overrides) {
+      setPresupuestos(prev => prev.map(p => p.id === presupuestoId ? { ...p, ...overrides, updatedAt: now } : p))
+      supabase.from('presupuestos').update({ ...presupuestoToRow(overrides), updated_at: now }).eq('id', presupuestoId)
+        .then(({ error: presupuestoError }) => { if (presupuestoError) logPersistError('convertirEnVenta:presupuesto', presupuestoError) })
     }
 
     setVentas(prev => [nuevaVenta, ...prev])
