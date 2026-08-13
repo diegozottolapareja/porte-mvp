@@ -53,7 +53,11 @@ function truncate(text: string): string {
 
 async function extractXlsxText(bytes: Uint8Array): Promise<string> {
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(Buffer.from(bytes));
+  // exceljs trae su propio @types/node (v14, Buffer no genérico) como
+  // dependencia transitiva, distinto del @types/node del workspace (v25,
+  // Buffer genérico) — son dos tipos "Buffer" nominales incompatibles para
+  // TS aunque sea el mismo Buffer en runtime, de ahí el `any`.
+  await workbook.xlsx.load(Buffer.from(bytes) as any);
   const sheets = workbook.worksheets.map((sheet) => {
     const lines: string[] = [];
     sheet.eachRow({ includeEmpty: false }, (row) => {
