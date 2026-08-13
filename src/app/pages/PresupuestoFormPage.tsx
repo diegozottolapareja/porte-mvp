@@ -6,7 +6,7 @@ import { CondicionesComercialesFields, CONDICIONES_COMERCIALES_DRAFT_VACIO, type
 import { CONFIG_LISTS, validarCondicionesComerciales, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial, type CondicionPago, type TipoCaja } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency, todayLocal } from '@/lib/format'
+import { formatCurrency, localDateString, todayLocal } from '@/lib/format'
 import { isNegativeAmount } from '@/lib/validation'
 
 export default function PresupuestoFormPage() {
@@ -28,7 +28,8 @@ export default function PresupuestoFormPage() {
   const [comercial, setComercial] = useState(existing?.comercial?.toString() ?? '')
   const [beneficio, setBeneficio] = useState(existing?.beneficio?.toString() ?? '')
   const [estadoComercial, setEstadoComercial] = useState<EstadoComercial>(existing?.estadoComercial ?? 'Pedido')
-  const [vencimiento, setVencimiento] = useState(existing?.vencimiento ?? '')
+  // Un presupuesto nuevo vence a las 48hs de creado por defecto — el usuario puede cambiarlo.
+  const [vencimiento, setVencimiento] = useState(existing?.vencimiento ?? localDateString(new Date(Date.now() + 48 * 60 * 60 * 1000)))
   const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
   const [condiciones, setCondiciones] = useState<CondicionesComercialesDraft>(CONDICIONES_COMERCIALES_DRAFT_VACIO)
   const [convirtiendo, setConvirtiendo] = useState(false)
@@ -130,7 +131,9 @@ export default function PresupuestoFormPage() {
         toast.error(resultado.error)
         return
       }
-      toast.success(`Venta ${resultado.venta.id} creada`)
+      toast.success(`Venta ${resultado.venta.id} creada`, {
+        action: { label: 'Ver venta', onClick: () => navigate(`/ventas/${encodeURIComponent(resultado.venta.id)}`) },
+      })
       navigate(`/ventas/${encodeURIComponent(resultado.venta.id)}`)
     } finally {
       setConvirtiendo(false)
