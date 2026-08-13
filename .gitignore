@@ -1,6 +1,8 @@
-# Dependencias
+# Dependencias — el proyecto usa pnpm (pnpm-lock.yaml es la fuente de verdad
+# para Vercel); un package-lock.json desincronizado rompe el build ahí.
 node_modules
 .pnpm-store
+package-lock.json
 
 # Compilación y caché
 dist
