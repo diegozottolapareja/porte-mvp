@@ -1,7 +1,7 @@
-import presupuestosHandler from '../presupuestos';
-import egresosHandler from '../egresos';
-import ingresosHandler from '../ingresos';
-import clientesHandler from '../clientes';
+import presupuestosHandler from '../presupuestos.js';
+import egresosHandler from '../egresos.js';
+import ingresosHandler from '../ingresos.js';
+import clientesHandler from '../clientes.js';
 
 // Whitelist explícita de acciones que el modelo puede pedir. El LLM elige el
 // nombre y los parámetros, pero nunca ejecuta nada directamente — esta es la

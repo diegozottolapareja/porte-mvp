@@ -1,6 +1,6 @@
-import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin';
-import { ASSISTANT_TOOLS, SYSTEM_PROMPT } from '../_lib/assistantTools';
-import { executeAction } from '../_lib/actionExecutor';
+import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin.js';
+import { ASSISTANT_TOOLS, SYSTEM_PROMPT } from '../_lib/assistantTools.js';
+import { executeAction } from '../_lib/actionExecutor.js';
 
 export const config = { runtime: 'edge' };
 

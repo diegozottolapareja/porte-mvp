@@ -1,5 +1,5 @@
-import { CATEGORIA } from '../presupuestos';
-import { TIPO_EGRESO, TIPO_INGRESO, CATEG_DIRECTOS, CATEG_INDIRECTOS, CUENTAS, TIPO_CAJA } from './configLists';
+import { CATEGORIA } from '../presupuestos.js';
+import { TIPO_EGRESO, TIPO_INGRESO, CATEG_DIRECTOS, CATEG_INDIRECTOS, CUENTAS, TIPO_CAJA } from './configLists.js';
 
 // Prompt de sistema y definición de tools del asistente de Porte. Portado de
 // las toolDescription del workflow n8n "Telegram Voice Agent Pilot" (nunca

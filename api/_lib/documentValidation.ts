@@ -1,6 +1,6 @@
-import type { ExtractedDocumentData } from './documentSchemas';
-import { TIPO_EGRESO, TIPO_INGRESO, CATEG_DIRECTOS, CATEG_INDIRECTOS } from './configLists';
-import { CATEGORIA } from '../presupuestos';
+import type { ExtractedDocumentData } from './documentSchemas.js';
+import { TIPO_EGRESO, TIPO_INGRESO, CATEG_DIRECTOS, CATEG_INDIRECTOS } from './configLists.js';
+import { CATEGORIA } from '../presupuestos.js';
 
 // Prefijo "_" — código compartido dentro del bundle de /api, no una ruta.
 //

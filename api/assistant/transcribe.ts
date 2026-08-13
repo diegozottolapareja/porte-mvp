@@ -1,4 +1,4 @@
-import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin';
+import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin.js';
 
 export const config = { runtime: 'edge' };
 

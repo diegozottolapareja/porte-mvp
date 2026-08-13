@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin';
-import { processDocument } from '../_lib/documentProcessingService';
-import { validateExpense, validateIncome, validateBudget, validateBudgetGroup, type PresupuestoPayload } from '../_lib/documentValidation';
-import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/documentSchemas';
+import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin.js';
+import { processDocument } from '../_lib/documentProcessingService.js';
+import { validateExpense, validateIncome, validateBudget, validateBudgetGroup, type PresupuestoPayload } from '../_lib/documentValidation.js';
+import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/documentSchemas.js';
 
 // Runtime Node.js por defecto (sin `config.runtime = 'edge'`, igual que
 // api/presupuestos.ts) — necesita Buffer para el hash/base64 de los archivos.

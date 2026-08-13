@@ -1,4 +1,4 @@
-import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtractionEnvelope } from './documentSchemas';
+import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtractionEnvelope } from './documentSchemas.js';
 
 // Soporte de XLSX/DOCX (exceljs/mammoth) deshabilitado temporalmente: esas
 // dependencias en el grafo de esta función rompen la resolución de módulos

@@ -1,4 +1,4 @@
-import { TIPO_EGRESO, TIPO_INGRESO } from './configLists';
+import { TIPO_EGRESO, TIPO_INGRESO } from './configLists.js';
 
 // Prefijo "_" — código compartido dentro del bundle de /api, no una ruta.
 //

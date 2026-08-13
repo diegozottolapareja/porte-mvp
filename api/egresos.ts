@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { TIPO_EGRESO, CATEG_DIRECTOS, CATEG_INDIRECTOS, CUENTAS, TIPO_CAJA, ESTADO_EGRESO } from './_lib/configLists';
+import { TIPO_EGRESO, CATEG_DIRECTOS, CATEG_INDIRECTOS, CUENTAS, TIPO_CAJA, ESTADO_EGRESO } from './_lib/configLists.js';
 
 export const config = {
   runtime: 'edge',
