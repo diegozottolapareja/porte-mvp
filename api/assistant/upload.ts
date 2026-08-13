@@ -10,8 +10,13 @@ import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/
 // resultado en `conversations.pending_extraction`. La confirmación por texto
 // o voz (api/assistant/message.ts) es la que dispara el Action Executor.
 
-// Excel/Word deshabilitados temporalmente — ver documentProcessingService.ts.
-const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+];
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
 const MAX_FILES_PER_UPLOAD = 5;
 
@@ -143,7 +148,7 @@ export default async function handler(request: Request) {
       const name = sanitizeFileName(file.name);
 
       if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-        summaries.push({ name, size: file.size, summary: `"${name}": tipo de archivo no soportado (${file.type || 'desconocido'}). Solo PDF, JPG o PNG.`, error: 'unsupported_type' });
+        summaries.push({ name, size: file.size, summary: `"${name}": tipo de archivo no soportado (${file.type || 'desconocido'}). Solo PDF, JPG, PNG, Excel (.xlsx) o Word (.docx).`, error: 'unsupported_type' });
         continue;
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {

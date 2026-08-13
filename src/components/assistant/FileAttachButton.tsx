@@ -4,8 +4,13 @@ import { Paperclip } from 'lucide-react'
 
 // Límites en duplicado del lado del cliente para dar feedback inmediato —
 // la validación real (autoritativa) vive en api/assistant/upload.ts.
-// Excel/Word deshabilitados temporalmente — ver api/_lib/documentProcessingService.ts.
-export const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
+export const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+]
 export const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024
 export const MAX_FILES_PER_UPLOAD = 5
 
@@ -28,7 +33,7 @@ export function FileAttachButton({ onFilesSelected, disabled }: FileAttachButton
     }
     const invalido = files.find(f => !ALLOWED_MIME_TYPES.includes(f.type))
     if (invalido) {
-      toast.error(`"${invalido.name}" no es un tipo soportado — solo PDF, JPG o PNG`)
+      toast.error(`"${invalido.name}" no es un tipo soportado — solo PDF, JPG, PNG, Excel (.xlsx) o Word (.docx)`)
       return
     }
     const pesado = files.find(f => f.size > MAX_FILE_SIZE_BYTES)
@@ -46,7 +51,7 @@ export function FileAttachButton({ onFilesSelected, disabled }: FileAttachButton
         ref={inputRef}
         type="file"
         multiple
-        accept={ALLOWED_MIME_TYPES.join(',')}
+        accept={[...ALLOWED_MIME_TYPES, '.xlsx', '.docx'].join(',')}
         onChange={handleChange}
         className="hidden"
       />
