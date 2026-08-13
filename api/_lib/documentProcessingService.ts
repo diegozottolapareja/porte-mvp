@@ -1,33 +1,24 @@
-import type ExcelJS from 'exceljs';
 import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtractionEnvelope } from './documentSchemas.js';
 
-// exceljs/mammoth se importan dinámicamente dentro de extractXlsxText/
-// extractDocxText (no acá arriba) — son dependencias pesadas que solo hacen
-// falta para esos dos formatos, y mantenerlas fuera del import estático evita
-// que el bundler de Vercel las arrastre en cada cold start de esta función
-// (que también procesa PDF/imagen, el caso más común).
+// Soporte de XLSX/DOCX (exceljs/mammoth) deshabilitado temporalmente: esas
+// librerías dependen de node:stream (vía archiver/unzipper/jszip), que no
+// existe en el runtime edge — y esta función corre en edge (junto con el
+// resto de api/*) porque api/assistant/upload.ts necesita un Request real
+// (ver el fix de runtime en ese archivo). Para reintroducir XLSX/DOCX hay
+// que aislar esa extracción en una función aparte con runtime Node.js.
 
 // Prefijo "_" — código compartido dentro del bundle de /api, no una ruta.
 //
-// Clasifica y extrae datos de un archivo (PDF/JPG/PNG/XLSX/DOCX) vía la
-// Responses API de OpenAI (no la Chat Completions API que usa
-// api/assistant/message.ts — esa no soporta PDF nativo). Llamada aislada y
-// sin estado: no manda el historial de la conversación, solo el documento —
-// clasificar no necesita contexto conversacional y así se evita inflar el
-// costo por archivo.
-//
-// PDF/JPG/PNG se mandan tal cual (lectura nativa de OpenAI, sin librerías) —
-// XLSX/DOCX en cambio se extraen a texto plano localmente antes de mandarlos,
-// porque OpenAI no los lee nativamente.
+// Clasifica y extrae datos de un archivo (PDF/JPG/PNG) vía la Responses API
+// de OpenAI (no la Chat Completions API que usa api/assistant/message.ts —
+// esa no soporta PDF nativo). Llamada aislada y sin estado: no manda el
+// historial de la conversación, solo el documento — clasificar no necesita
+// contexto conversacional y así se evita inflar el costo por archivo.
 //
 // Nunca ejecuta ninguna acción — devuelve el resultado normalizado para que
 // el caller lo valide (documentValidation.ts) antes de tocar el Action Executor.
 
 const OPENAI_MODEL = 'gpt-4o-mini';
-const MAX_EXTRACTED_TEXT_CHARS = 20000;
-
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 const DOCUMENT_SYSTEM_PROMPT = `Sos un clasificador y extractor de documentos comerciales para Porte, una empresa de portones, cortinas y estructuras metálicas.
 
@@ -38,48 +29,7 @@ Reglas:
 - "confidence" (0 a 1) refleja qué tan seguro estás de la clasificación en "documentType".
 - Si no podés determinar el tipo de documento con confianza razonable, usá documentType "unknown" y confidence baja.
 - "budget_group" es solo cuando el documento contiene claramente más de un presupuesto separado — usá "documents", no "data", en ese caso.
-- Para presupuestos (budget/budget_group): la mayoría son cotizaciones al cliente con ítems + Sub Total + IVA + Total, SIN desglose de costos internos (materiales, mano de obra, indirectos, comercial, beneficio) — en ese caso NO inventes esos campos, dejalos en null, y extraé el Sub Total en "subtotal", el IVA en "impuestos" y el Total en "monto". Si el documento sí trae explícitamente ese desglose interno de costos (poco común), extraé cada uno directamente en su campo (costoMat, costoMo, etc.) en vez de usar subtotal/monto.
-- Algunos documentos llegan como texto plano ya extraído de un Excel (una tabla por hoja) o de un Word — interpretalos igual que si fueran el documento visual original, buscando los mismos campos.`;
-
-function cellToText(value: ExcelJS.CellValue): string {
-  if (value == null) return '';
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  if (typeof value === 'object') {
-    if ('text' in value && typeof value.text === 'string') return value.text;
-    if ('result' in value) return cellToText((value as { result: ExcelJS.CellValue }).result);
-    if ('richText' in value && Array.isArray(value.richText)) return value.richText.map((r) => r.text).join('');
-  }
-  return String(value);
-}
-
-function truncate(text: string): string {
-  return text.length > MAX_EXTRACTED_TEXT_CHARS ? `${text.slice(0, MAX_EXTRACTED_TEXT_CHARS)}\n[...texto truncado...]` : text;
-}
-
-async function extractXlsxText(bytes: Uint8Array): Promise<string> {
-  const { default: ExcelJSRuntime } = await import('exceljs');
-  const workbook = new ExcelJSRuntime.Workbook();
-  // exceljs trae su propio @types/node (v14, Buffer no genérico) como
-  // dependencia transitiva, distinto del @types/node del workspace (v25,
-  // Buffer genérico) — son dos tipos "Buffer" nominales incompatibles para
-  // TS aunque sea el mismo Buffer en runtime, de ahí el `any`.
-  await workbook.xlsx.load(Buffer.from(bytes) as any);
-  const sheets = workbook.worksheets.map((sheet) => {
-    const lines: string[] = [];
-    sheet.eachRow({ includeEmpty: false }, (row) => {
-      const values = Array.isArray(row.values) ? row.values.slice(1) : [];
-      lines.push(values.map(cellToText).join(' | '));
-    });
-    return `--- Hoja: ${sheet.name} ---\n${lines.join('\n')}`;
-  });
-  return truncate(sheets.join('\n\n'));
-}
-
-async function extractDocxText(bytes: Uint8Array): Promise<string> {
-  const { default: mammothRuntime } = await import('mammoth');
-  const { value } = await mammothRuntime.extractRawText({ buffer: Buffer.from(bytes) });
-  return truncate(value);
-}
+- Para presupuestos (budget/budget_group): la mayoría son cotizaciones al cliente con ítems + Sub Total + IVA + Total, SIN desglose de costos internos (materiales, mano de obra, indirectos, comercial, beneficio) — en ese caso NO inventes esos campos, dejalos en null, y extraé el Sub Total en "subtotal", el IVA en "impuestos" y el Total en "monto". Si el documento sí trae explícitamente ese desglose interno de costos (poco común), extraé cada uno directamente en su campo (costoMat, costoMo, etc.) en vez de usar subtotal/monto.`;
 
 export interface ProcessedDocument {
   envelope: DocumentExtractionEnvelope;
@@ -117,10 +67,6 @@ export async function processDocument(file: { name: string; mimeType: string; by
   if (file.mimeType === 'application/pdf') {
     const base64 = Buffer.from(file.bytes).toString('base64');
     content.push({ type: 'input_file', filename: file.name, file_data: `data:${file.mimeType};base64,${base64}` });
-  } else if (file.mimeType === XLSX_MIME) {
-    content.push({ type: 'input_text', text: await extractXlsxText(file.bytes) });
-  } else if (file.mimeType === DOCX_MIME) {
-    content.push({ type: 'input_text', text: await extractDocxText(file.bytes) });
   } else {
     const base64 = Buffer.from(file.bytes).toString('base64');
     content.push({ type: 'input_image', image_url: `data:${file.mimeType};base64,${base64}` });
