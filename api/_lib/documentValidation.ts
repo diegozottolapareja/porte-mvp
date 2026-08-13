@@ -107,8 +107,18 @@ export function validateBudget(data: ExtractedDocumentData): ValidationResult<Pr
     defaulted.push('categoría (sin coincidencia en el documento, uso OTRO)');
   }
 
+  // Un presupuesto clásico de Porte es una cotización al cliente (ítems + Sub
+  // Total + IVA + Total) — nunca trae el desglose interno de costos
+  // (materiales/mano de obra/indirectos/comercial/beneficio), eso es
+  // información interna que el documento no expone. Como aproximación se usa
+  // el Sub Total (precio de venta sin IVA) como costoMat y el IVA como
+  // impuestos, para no perder el monto real del documento — pero sigue sin
+  // ser el desglose interno real, por eso queda "Incompleto" igual.
   let costoMat = data.costoMat;
-  if (costoMat == null) {
+  if (costoMat == null && data.subtotal != null) {
+    costoMat = data.subtotal;
+    defaulted.push(`costo materiales (el documento no desglosa costos internos, se usó el Sub Total de la cotización: $${data.subtotal.toLocaleString('es-AR')})`);
+  } else if (costoMat == null) {
     costoMat = 0;
     defaulted.push('costo materiales (no encontrado, uso $0)');
   }
@@ -117,6 +127,11 @@ export function validateBudget(data: ExtractedDocumentData): ValidationResult<Pr
   if (costoMo == null) {
     costoMo = 0;
     defaulted.push('costo mano de obra (no encontrado, uso $0)');
+  }
+
+  let impuestos = data.impuestos;
+  if (impuestos == null && data.subtotal != null && data.monto != null) {
+    impuestos = data.monto - data.subtotal;
   }
 
   return {
@@ -128,7 +143,7 @@ export function validateBudget(data: ExtractedDocumentData): ValidationResult<Pr
       costoMat,
       costoMo,
       indVendidos: data.indVendidos ?? undefined,
-      impuestos: data.impuestos ?? undefined,
+      impuestos: impuestos ?? undefined,
       comercial: data.comercial ?? undefined,
       beneficio: data.beneficio ?? undefined,
       estadoComercial: defaulted.length > 0 ? 'Incompleto' : undefined,
