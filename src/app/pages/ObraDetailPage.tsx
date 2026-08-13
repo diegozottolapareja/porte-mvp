@@ -12,8 +12,8 @@ import { EstadoOperativoSelect } from '@/components/EstadoOperativoSelect'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs'
 import { Progress } from '@/app/components/ui/progress'
 import {
-  ESTADO_OPERATIVO_CONFIG, ESTADO_COBRO_CONFIG, RENTABILIDAD_RATING_CONFIG,
-  getTotalCobrado, getSaldoPendiente, getCostoEstimado, getDesvioCosto, getEstadoCobro, getRentabilidadRating,
+  ESTADO_OPERATIVO_CONFIG, ESTADO_COBRO_CONFIG,
+  getTotalCobrado, getSaldoPendiente, getEstadoCobro, getCosteRealPorCategoria, getCosteRealTotal,
   type EstadoOperativo, type Variacion, type Aprendizaje,
 } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
@@ -21,11 +21,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { ClipboardList } from 'lucide-react'
 
-const CATEGORIAS_COSTO: Array<{ key: 'mater' | 'mo' | 'indVend' | 'imp' | 'comerc'; label: string }> = [
+// Coste estimado (congelado al convertir el presupuesto en venta): sin
+// impuestos ni beneficio — esos no forman parte del costo de ejecución.
+const CATEGORIAS_COSTO_ESTIMADO: Array<{ key: 'mater' | 'mo' | 'indVend' | 'comerc'; label: string }> = [
   { key: 'mater', label: 'Materiales' },
   { key: 'mo', label: 'Mano de obra' },
   { key: 'indVend', label: 'Indirectos' },
-  { key: 'imp', label: 'Impuestos' },
   { key: 'comerc', label: 'Comercial' },
 ]
 
@@ -60,12 +61,11 @@ export default function ObraDetailPage() {
   const cobrado = getTotalCobrado(venta.id, ingresos)
   const pendiente = getSaldoPendiente(venta, ingresos)
   const pct = venta.ventaFinal > 0 ? Math.min(100, Math.round((cobrado / venta.ventaFinal) * 100)) : 0
-  const costoEstimado = getCostoEstimado(venta)
-  const desvio = getDesvioCosto(venta, egresos)
+  const costeEstimadoTotal = venta.mater + venta.mo + venta.indVend + venta.comerc
+  const costeRealPorCategoria = getCosteRealPorCategoria(venta.id, egresos)
+  const costeRealTotal = getCosteRealTotal(venta.id, egresos)
   const estado = ESTADO_OPERATIVO_CONFIG[venta.estadoOp]
   const estadoCobro = ESTADO_COBRO_CONFIG[getEstadoCobro(venta, ingresos)]
-  const rentabilidad = getRentabilidadRating(venta, egresos)
-  const rentabilidadCfg = rentabilidad ? RENTABILIDAD_RATING_CONFIG[rentabilidad] : undefined
 
   const ingresosObra = ingresos.filter(i => i.activo && i.id === venta.id)
   const egresosObra = egresos.filter(e => e.activo && e.id === venta.id)
@@ -115,7 +115,7 @@ export default function ObraDetailPage() {
 
         <Tabs defaultValue={initialTab}>
           <TabsList className="w-full grid grid-cols-5 lg:w-auto lg:inline-grid">
-            <TabsTrigger value="datos">Datos</TabsTrigger>
+            <TabsTrigger value="datos">Condiciones</TabsTrigger>
             <TabsTrigger value="ingresos">Ingresos</TabsTrigger>
             <TabsTrigger value="egresos">Egresos</TabsTrigger>
             <TabsTrigger value="variaciones">Variac.</TabsTrigger>
@@ -129,44 +129,50 @@ export default function ObraDetailPage() {
               <InfoField label="Vencimiento cobro" value={formatDate(venta.vencCobro)} />
               <InfoField label="Caja intención" value={venta.cajaIntenc} />
               <InfoField label="Entrega comprometida" value={formatDate(venta.entregaCompr)} />
-              <InfoField label="Entrega real" value={formatDate(venta.entregaReal)} />
+              <EntregaRealField
+                key={venta.id}
+                value={venta.entregaReal}
+                editable={can('ventas:write')}
+                onSave={entregaReal => updateVenta(venta.id, { entregaReal })}
+              />
               <InfoField label="Responsable" value={venta.respOp} />
             </div>
 
-            <div className="bg-white rounded-2xl border border-border p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Costeo estimado vs real</h3>
-                {rentabilidadCfg ? (
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${rentabilidadCfg.color} ${rentabilidadCfg.bgColor}`} title="Nota de rentabilidad">
-                    {rentabilidadCfg.label}
-                  </span>
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl border border-border p-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Coste estimado</h3>
+                <div className="space-y-2 mb-3">
+                  {CATEGORIAS_COSTO_ESTIMADO.map(c => (
+                    <div key={c.key} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">{c.label}</span>
+                      <span className="font-medium">{formatCurrency(venta[c.key])}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="border-t border-border pt-3 flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total</span>
+                  <span className="font-semibold">{formatCurrency(costeEstimadoTotal)}</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-border p-4">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Coste real</h3>
+                {costeRealPorCategoria.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Todavía no hay egresos asociados a esta obra.</p>
                 ) : (
-                  <span className="text-xs font-medium px-2 py-0.5 rounded-full text-gray-500 bg-gray-100" title="Todavía no hay egresos cargados para esta obra">
-                    Sin datos
-                  </span>
-                )}
-              </div>
-              <div className="space-y-2 mb-3">
-                {CATEGORIAS_COSTO.map(c => (
-                  <div key={c.key} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{c.label}</span>
-                    <span className="font-medium">{formatCurrency(venta[c.key])}</span>
+                  <div className="space-y-2 mb-3">
+                    {costeRealPorCategoria.map(c => (
+                      <div key={c.categoria} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">{c.categoria}</span>
+                        <span className="font-medium">{formatCurrency(c.total)}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <div className="border-t border-border pt-3 flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Costo estimado total</span>
-                <span className="font-semibold">{formatCurrency(costoEstimado)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Egresado real</span>
-                <span className="font-semibold">{formatCurrency(costoEstimado + desvio)}</span>
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-sm text-muted-foreground">Desvío</span>
-                <span className={`font-semibold ${desvio > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {desvio > 0 ? '+' : ''}{formatCurrency(desvio)}
-                </span>
+                )}
+                <div className="border-t border-border pt-3 flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total</span>
+                  <span className="font-semibold">{formatCurrency(costeRealTotal)}</span>
+                </div>
               </div>
             </div>
           </TabsContent>
@@ -320,6 +326,33 @@ function InfoField({ label, value }: { label: string; value?: string }) {
     <div>
       <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
       <p className="text-sm font-medium text-gray-800">{value || '—'}</p>
+    </div>
+  )
+}
+
+// La entrega real no existe todavía cuando se convierte el presupuesto en
+// venta — se completa después, acá mismo, cuando el trabajo se entrega.
+function EntregaRealField({ value, editable, onSave }: { value?: string; editable: boolean; onSave: (value: string) => void }) {
+  const [draft, setDraft] = useState(value ?? '')
+
+  if (!editable) return <InfoField label="Entrega real" value={formatDate(value)} />
+
+  return (
+    <div>
+      <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Entrega real</p>
+      <div className="flex items-center gap-1.5">
+        <input
+          type="date"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          className="w-full h-9 px-2 rounded-xl border border-border bg-white text-sm"
+        />
+        {draft !== (value ?? '') && (
+          <button type="button" onClick={() => onSave(draft)} className="shrink-0 text-xs font-medium text-primary px-2 py-1.5">
+            Guardar
+          </button>
+        )}
+      </div>
     </div>
   )
 }

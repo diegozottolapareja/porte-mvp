@@ -43,8 +43,10 @@ export default function ClienteDetailPage() {
     >
       <div className="space-y-4">
         <div className="bg-white rounded-2xl border border-border p-4 grid grid-cols-2 gap-4">
-          <div><p className="text-[11px] text-muted-foreground uppercase">Contacto</p><p className="text-sm font-medium flex items-center gap-1"><Phone className="w-3 h-3" />{cliente.contacto || '—'}</p></div>
-          <div><p className="text-[11px] text-muted-foreground uppercase">Teléfono</p><p className="text-sm font-medium">{cliente.telefono || '—'}</p></div>
+          <div><p className="text-[11px] text-muted-foreground uppercase">Email principal</p><p className="text-sm font-medium">{cliente.emailPrincipal || '—'}</p></div>
+          <div><p className="text-[11px] text-muted-foreground uppercase">Teléfono principal</p><p className="text-sm font-medium flex items-center gap-1"><Phone className="w-3 h-3" />{cliente.telefonoPrincipal || '—'}</p></div>
+          <div><p className="text-[11px] text-muted-foreground uppercase">Email secundario</p><p className="text-sm font-medium">{cliente.emailSecundario || '—'}</p></div>
+          <div><p className="text-[11px] text-muted-foreground uppercase">Teléfono secundario</p><p className="text-sm font-medium">{cliente.telefonoSecundario || '—'}</p></div>
           <div className="col-span-2"><p className="text-[11px] text-muted-foreground uppercase">Dirección</p><p className="text-sm font-medium flex items-center gap-1"><MapPin className="w-3 h-3" />{cliente.direccion || '—'}</p></div>
         </div>
 

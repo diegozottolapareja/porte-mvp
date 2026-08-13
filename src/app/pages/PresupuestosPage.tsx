@@ -26,13 +26,13 @@ export default function PresupuestosPage() {
 
   const handleAceptar = (p: Presupuesto) => {
     if (!user) return
-    const resultado = aceptarPresupuesto(p.id, user.id)
+    const resultado = aceptarPresupuesto(p.id)
     if (!resultado.ok) {
       toast.error(resultado.error)
       return
     }
-    toast.success(`Presupuesto ${p.id} aceptado — venta creada`, {
-      action: { label: 'Ver venta', onClick: () => navigate(`/ventas/${encodeURIComponent(p.id)}`) },
+    toast.success(`Presupuesto ${p.id} aceptado`, {
+      action: { label: 'Completar condiciones', onClick: () => navigate(`/presupuestos/${encodeURIComponent(p.id)}`) },
     })
   }
 

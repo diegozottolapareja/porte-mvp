@@ -1,6 +1,7 @@
 import presupuestosHandler from '../presupuestos';
 import egresosHandler from '../egresos';
 import ingresosHandler from '../ingresos';
+import clientesHandler from '../clientes';
 
 // Whitelist explícita de acciones que el modelo puede pedir. El LLM elige el
 // nombre y los parámetros, pero nunca ejecuta nada directamente — esta es la
@@ -12,7 +13,7 @@ export interface ActionResult {
   error?: string;
 }
 
-const ALLOWED_ACTIONS = new Set(['create_presupuesto', 'create_egreso', 'create_ingreso', 'create_budget_batch']);
+const ALLOWED_ACTIONS = new Set(['create_presupuesto', 'create_egreso', 'create_ingreso', 'create_budget_batch', 'create_cliente']);
 
 export async function executeAction(name: string, args: Record<string, unknown>, userId: string): Promise<ActionResult> {
   if (!ALLOWED_ACTIONS.has(name)) {
@@ -28,6 +29,8 @@ export async function executeAction(name: string, args: Record<string, unknown>,
       return invokeInternal(egresosHandler, 'http://internal/api/egresos', args, userId, 'egreso', 'Error creando el egreso');
     case 'create_ingreso':
       return invokeInternal(ingresosHandler, 'http://internal/api/ingresos', args, userId, 'ingreso', 'Error creando el ingreso');
+    case 'create_cliente':
+      return invokeInternal(clientesHandler, 'http://internal/api/clientes', args, userId, 'cliente', 'Error creando el cliente');
     default:
       return { ok: false, error: `Acción no implementada: ${name}` };
   }

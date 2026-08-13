@@ -4,7 +4,7 @@ import type { Egreso } from './data/egresos'
 import type { Presupuesto } from './data/presupuestos'
 import type { Venta } from './data/ventas'
 import type { Proveedor } from './data/proveedores'
-import type { Cliente } from './data/clientes'
+import type { Cliente, ClienteUpdate } from './data/clientes'
 import type { GastoFijo } from './data/gastosFijos'
 import type { Variacion } from './data/variaciones'
 import type { Aprendizaje } from './data/aprendizajes'
@@ -159,16 +159,20 @@ export function proveedorToRow(p: Partial<Proveedor>): Row {
 export function rowToCliente(r: Row): Cliente {
   return {
     idCli: r.id_cli, nombre: r.nombre, contacto: r.contacto ?? '', telefono: r.telefono ?? '',
+    emailPrincipal: r.email_principal ?? undefined, emailSecundario: r.email_secundario ?? undefined,
+    telefonoPrincipal: r.telefono_principal ?? undefined, telefonoSecundario: r.telefono_secundario ?? undefined,
     direccion: r.direccion ?? undefined, activo: r.activo, observaciones: r.observaciones ?? undefined,
     createdAt: r.created_at, createdBy: r.created_by, updatedAt: r.updated_at,
   }
 }
-export function clienteToRow(c: Partial<Cliente>): Row {
+export function clienteToRow(c: ClienteUpdate): Row {
   const row: Row = {}
   if (c.idCli !== undefined) row.id_cli = c.idCli
   if (c.nombre !== undefined) row.nombre = c.nombre
-  if (c.contacto !== undefined) row.contacto = c.contacto
-  if (c.telefono !== undefined) row.telefono = c.telefono
+  if (c.emailPrincipal !== undefined) row.email_principal = c.emailPrincipal ?? null
+  if (c.emailSecundario !== undefined) row.email_secundario = c.emailSecundario ?? null
+  if (c.telefonoPrincipal !== undefined) row.telefono_principal = c.telefonoPrincipal ?? null
+  if (c.telefonoSecundario !== undefined) row.telefono_secundario = c.telefonoSecundario ?? null
   if (c.direccion !== undefined) row.direccion = c.direccion ?? null
   if (c.activo !== undefined) row.activo = c.activo
   if (c.observaciones !== undefined) row.observaciones = c.observaciones ?? null

@@ -42,12 +42,12 @@ export default function ClientesPage() {
         renderItem={c => (
           <EntityCard
             title={c.nombre}
-            subtitle={c.contacto}
+            subtitle={c.emailPrincipal ?? c.telefonoPrincipal}
             status={{ label: 'Activo', color: 'text-green-700', bgColor: 'bg-green-100' }}
             onClick={() => navigate(`/clientes/${encodeURIComponent(c.idCli)}`)}
             fields={[
-              { label: 'Teléfono', value: c.telefono },
-              { label: 'Dirección', value: c.direccion },
+              { label: 'Email', value: c.emailPrincipal },
+              { label: 'Teléfono', value: c.telefonoPrincipal },
             ]}
             actions={
               <div className="flex items-center gap-4">
@@ -92,8 +92,10 @@ function ClienteDialog({ value, onClose }: { value: Cliente | 'nuevo' | null; on
   const existing = value && value !== 'nuevo' ? value : undefined
 
   const [nombre, setNombre] = useState(existing?.nombre ?? '')
-  const [contacto, setContacto] = useState(existing?.contacto ?? '')
-  const [telefono, setTelefono] = useState(existing?.telefono ?? '')
+  const [emailPrincipal, setEmailPrincipal] = useState(existing?.emailPrincipal ?? '')
+  const [emailSecundario, setEmailSecundario] = useState(existing?.emailSecundario ?? '')
+  const [telefonoPrincipal, setTelefonoPrincipal] = useState(existing?.telefonoPrincipal ?? '')
+  const [telefonoSecundario, setTelefonoSecundario] = useState(existing?.telefonoSecundario ?? '')
   const [direccion, setDireccion] = useState(existing?.direccion ?? '')
   const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
 
@@ -108,16 +110,38 @@ function ClienteDialog({ value, onClose }: { value: Cliente | 'nuevo' | null; on
       toast.error('Completá el nombre')
       return
     }
-    const payload = {
-      nombre, contacto, telefono,
-      direccion: direccion || undefined,
-      observaciones: observaciones || undefined,
+    if (!emailPrincipal.trim() && !telefonoPrincipal.trim()) {
+      toast.error('Cargá al menos un email principal o un teléfono principal')
+      return
     }
+    const direccionValue = direccion || undefined
+    const observacionesValue = observaciones || undefined
+
     if (existing) {
-      updateCliente(existing.idCli, payload)
+      // Edición: un campo de contacto vaciado por el usuario tiene que viajar
+      // como `null` explícito (borrar de verdad) — de lo contrario
+      // clienteToRow lo ignora y el valor anterior sobrevive en la base
+      // aunque la UI ya lo muestre vacío.
+      updateCliente(existing.idCli, {
+        nombre,
+        emailPrincipal: emailPrincipal.trim() || null,
+        emailSecundario: emailSecundario.trim() || null,
+        telefonoPrincipal: telefonoPrincipal.trim() || null,
+        telefonoSecundario: telefonoSecundario.trim() || null,
+        direccion: direccionValue,
+        observaciones: observacionesValue,
+      })
       toast.success('Cliente actualizado')
     } else {
-      addCliente(payload, user.id)
+      addCliente({
+        nombre,
+        emailPrincipal: emailPrincipal.trim() || undefined,
+        emailSecundario: emailSecundario.trim() || undefined,
+        telefonoPrincipal: telefonoPrincipal.trim() || undefined,
+        telefonoSecundario: telefonoSecundario.trim() || undefined,
+        direccion: direccionValue,
+        observaciones: observacionesValue,
+      }, user.id)
       toast.success('Cliente creado')
     }
     onClose()
@@ -132,14 +156,23 @@ function ClienteDialog({ value, onClose }: { value: Cliente | 'nuevo' | null; on
             <label className="text-sm text-muted-foreground mb-1.5 block">Nombre *</label>
             <input value={nombre} onChange={e => setNombre(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
           </div>
+          <p className="text-xs text-muted-foreground -mt-1">Cargá al menos un email principal o un teléfono principal.</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">Contacto</label>
-              <input value={contacto} onChange={e => setContacto(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
+              <label className="text-sm text-muted-foreground mb-1.5 block">Email principal</label>
+              <input type="email" value={emailPrincipal} onChange={e => setEmailPrincipal(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
             </div>
             <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">Teléfono</label>
-              <input value={telefono} onChange={e => setTelefono(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
+              <label className="text-sm text-muted-foreground mb-1.5 block">Teléfono principal</label>
+              <input value={telefonoPrincipal} onChange={e => setTelefonoPrincipal(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground mb-1.5 block">Email secundario</label>
+              <input type="email" value={emailSecundario} onChange={e => setEmailSecundario(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground mb-1.5 block">Teléfono secundario</label>
+              <input value={telefonoSecundario} onChange={e => setTelefonoSecundario(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border text-sm" />
             </div>
           </div>
           <div>

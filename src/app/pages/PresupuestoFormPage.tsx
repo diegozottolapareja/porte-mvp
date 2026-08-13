@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
-import { CONFIG_LISTS, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial } from '@/modules/porte'
+import { CondicionesComercialesForm } from '@/components/CondicionesComercialesForm'
+import { CONFIG_LISTS, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial, type CondicionesComerciales } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, todayLocal } from '@/lib/format'
@@ -12,8 +13,9 @@ export default function PresupuestoFormPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { id } = useParams()
-  const { presupuestos, ventas, addPresupuesto, updatePresupuesto, aceptarPresupuesto, nextPresupuestoId, findOrCreateCliente } = usePorteData()
+  const { presupuestos, ventas, clientes, addPresupuesto, updatePresupuesto, aceptarPresupuesto, convertirEnVenta, nextPresupuestoId } = usePorteData()
   const existing = id ? presupuestos.find(p => p.id === decodeURIComponent(id)) : undefined
+  const clientesActivos = clientes.filter(c => c.activo)
 
   const [cliente, setCliente] = useState(existing?.cliente ?? '')
   const [descripcion, setDescripcion] = useState(existing?.descripcion ?? '')
@@ -28,6 +30,7 @@ export default function PresupuestoFormPage() {
   const [estadoComercial, setEstadoComercial] = useState<EstadoComercial>(existing?.estadoComercial ?? 'Pedido')
   const [vencimiento, setVencimiento] = useState(existing?.vencimiento ?? '')
   const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
+  const [convirtiendo, setConvirtiendo] = useState(false)
 
   const costoValues = [costoMat, costoMo, indVendidos, impuestos, comercial, beneficio]
   const hayAlgunCostoCargado = costoValues.some(v => v !== '')
@@ -37,7 +40,13 @@ export default function PresupuestoFormPage() {
 
   const handleSave = () => {
     if (!cliente || !user) {
-      toast.error('Completá el cliente')
+      toast.error('Elegí un cliente')
+      return
+    }
+    // La regla "no crear presupuesto sin cliente existente" solo aplica al alta —
+    // el trigger de la base (trg_validar_cliente_presupuesto) también es solo INSERT.
+    if (!existing && !clientesActivos.some(c => c.nombre.trim().toLowerCase() === cliente.trim().toLowerCase())) {
+      toast.error('El cliente no existe — crealo primero desde Clientes')
       return
     }
     if (costoMat === '' || costoMo === '') {
@@ -59,8 +68,6 @@ export default function PresupuestoFormPage() {
       return
     }
 
-    findOrCreateCliente(cliente, user.id)
-
     const payload = {
       cliente, descripcion, categoria, responsable,
       costoMat: costoMat === '' ? undefined : Number(costoMat),
@@ -81,16 +88,13 @@ export default function PresupuestoFormPage() {
       const dejaDeEstarAceptado = existing.estadoComercial === 'Aceptado' && estadoComercial !== 'Aceptado'
 
       if (pasaAAceptado) {
-        const resultado = aceptarPresupuesto(existing.id, user.id, payload)
+        const resultado = aceptarPresupuesto(existing.id, payload)
         // TODO: reemplazar con api.put(`/presupuestos/${existing.id}`, payload) — la transición vive en el backend
         if (!resultado.ok) {
           toast.error(resultado.error)
           return
         }
-        toast.success(`Presupuesto ${existing.id} aceptado — venta creada`, {
-          action: { label: 'Ver venta', onClick: () => navigate(`/ventas/${encodeURIComponent(existing.id)}`) },
-        })
-        navigate('/presupuestos')
+        toast.success(`Presupuesto ${existing.id} aceptado — completá las condiciones comerciales para convertirlo en venta`)
         return
       }
 
@@ -111,10 +115,52 @@ export default function PresupuestoFormPage() {
     navigate('/presupuestos')
   }
 
+  const handleConvertir = async (condiciones: CondicionesComerciales) => {
+    if (!existing || !user || convirtiendo) return
+    setConvirtiendo(true)
+    try {
+      const resultado = await convertirEnVenta(existing.id, condiciones, user.id)
+      if (!resultado.ok) {
+        toast.error(resultado.error)
+        return
+      }
+      toast.success(`Venta ${resultado.venta.id} creada`)
+      navigate(`/ventas/${encodeURIComponent(resultado.venta.id)}`)
+    } finally {
+      setConvirtiendo(false)
+    }
+  }
+
+  const mostrarCondicionesComerciales = !!existing
+    && existing.estadoComercial === 'Aceptado'
+    && !presupuestoTieneVentaAsociada(existing.id, ventas)
+
+  // Si el presupuesto existente quedó con un cliente que ya no está activo
+  // (baja posterior), lo mostramos igual para no pisarlo silenciosamente al guardar.
+  const clienteExistenteInactivo = existing && cliente
+    && !clientesActivos.some(c => c.nombre.trim().toLowerCase() === cliente.trim().toLowerCase())
+    ? cliente
+    : undefined
+
   return (
     <AppShell title={existing ? existing.id : 'Nuevo presupuesto'} onBack={() => navigate(-1)}>
       <div className="max-w-md mx-auto w-full space-y-4 lg:max-w-none lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
-        <Field label="Cliente" required><input value={cliente} onChange={e => setCliente(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
+        <Field label="Cliente" required>
+          {clientesActivos.length === 0 ? (
+            <div className="flex items-center justify-between h-12 px-4 rounded-2xl border border-dashed border-border bg-white text-sm text-muted-foreground">
+              <span>No hay clientes cargados</span>
+              <button type="button" onClick={() => navigate('/clientes')} className="text-primary font-medium">Crear cliente</button>
+            </div>
+          ) : (
+            <select value={cliente} onChange={e => setCliente(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm">
+              <option value="">Elegí un cliente...</option>
+              {clienteExistenteInactivo && <option value={clienteExistenteInactivo}>{clienteExistenteInactivo} (inactivo)</option>}
+              {clientesActivos.map(c => (
+                <option key={c.idCli} value={c.nombre}>{c.nombre}</option>
+              ))}
+            </select>
+          )}
+        </Field>
         <Field label="Descripción"><input value={descripcion} onChange={e => setDescripcion(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" /></Field>
 
         <Field label="Categoría">
@@ -161,6 +207,8 @@ export default function PresupuestoFormPage() {
         <button onClick={handleSave} className="w-full py-4 bg-primary text-white rounded-2xl font-semibold text-sm lg:col-span-2">
           Guardar presupuesto
         </button>
+
+        {mostrarCondicionesComerciales && <CondicionesComercialesForm onConvertir={handleConvertir} submitting={convirtiendo} />}
       </div>
     </AppShell>
   )

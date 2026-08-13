@@ -6,6 +6,10 @@ export const config = { runtime: 'edge' };
 
 const MAX_HISTORY_MESSAGES = 20;
 const OPENAI_MODEL = 'gpt-4o-mini';
+// Tope de hops tool-calling → OpenAI en un mismo turno. El flujo
+// create_cliente → create_presupuesto necesita 2; se deja margen sin permitir
+// loops accidentales.
+const MAX_TOOL_HOPS = 4;
 
 type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
@@ -133,38 +137,53 @@ export default async function handler(request: Request) {
     let actionError: string | undefined;
     let pendingCleared = false;
 
-    const toolCall = choice.message.tool_calls?.[0];
-    if (toolCall) {
-      actionName = toolCall.function.name;
-      try {
-        actionParams = JSON.parse(toolCall.function.arguments);
-      } catch {
-        actionParams = {};
-      }
-
-      const result = await executeAction(actionName, actionParams ?? {}, user.id);
-      actionResult = result.data;
-      actionError = result.error;
-
-      // Una vez que una acción de creación se ejecuta con éxito, la extracción
-      // pendiente quedó resuelta — se limpia para no volver a inyectarla.
-      if (result.ok && pendingExtraction) {
-        await supabase.from('conversations').update({ pending_extraction: null, pending_extraction_type: null }).eq('id', conversationId);
-        pendingCleared = true;
-      }
-
+    // Multi-hop: una misma respuesta de OpenAI puede traer varias tool_calls
+    // (llamadas en paralelo), y resolverlas puede hacer que el modelo pida
+    // otra ronda de tools (ej. create_cliente y recién después, en el
+    // siguiente hop, create_presupuesto). Se procesan todas las tool_calls de
+    // cada respuesta antes de volver a llamar a OpenAI, y se repite hasta que
+    // el modelo devuelva texto sin tool_calls o se llegue a MAX_TOOL_HOPS.
+    let hops = 0;
+    while (choice.message.tool_calls && choice.message.tool_calls.length > 0 && hops < MAX_TOOL_HOPS) {
+      hops++;
       messages.push(choice.message);
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(result.ok ? { success: true, data: result.data } : { success: false, error: result.error }),
-      });
+
+      for (const toolCall of choice.message.tool_calls) {
+        actionName = toolCall.function.name;
+        let params: Record<string, unknown>;
+        try {
+          params = JSON.parse(toolCall.function.arguments);
+        } catch {
+          params = {};
+        }
+        actionParams = params;
+
+        const result = await executeAction(actionName, params, user.id);
+        actionResult = result.data;
+        actionError = result.error;
+
+        // Una vez que una acción de creación se ejecuta con éxito, la extracción
+        // pendiente quedó resuelta — se limpia para no volver a inyectarla.
+        if (result.ok && pendingExtraction) {
+          await supabase.from('conversations').update({ pending_extraction: null, pending_extraction_type: null }).eq('id', conversationId);
+          pendingCleared = true;
+        }
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result.ok ? { success: true, data: result.data } : { success: false, error: result.error }),
+        });
+      }
 
       completion = await callOpenAI(messages);
       choice = completion.choices[0];
     }
 
-    const assistantText = choice.message.content ?? '';
+    const assistantText = choice.message.content
+      ?? (hops >= MAX_TOOL_HOPS
+        ? 'No pude terminar de resolver el pedido en los pasos permitidos. ¿Podés reformularlo o hacerlo en partes más simples?'
+        : '');
 
     await supabase.from('conversation_messages').insert({
       conversation_id: conversationId,

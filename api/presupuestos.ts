@@ -18,14 +18,6 @@ function numOrUndefined(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function nextSeqId(prefix: string, ids: string[]): string {
-  const max = ids.reduce((acc, id) => {
-    const n = Number(id.replace(`${prefix}-`, ''));
-    return Number.isFinite(n) ? Math.max(acc, n) : acc;
-  }, 0);
-  return `${prefix}-${String(max + 1).padStart(4, '0')}`;
-}
-
 export default async function handler(request: Request) {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -120,27 +112,28 @@ export default async function handler(request: Request) {
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
   try {
-    // 1. findOrCreateCliente para todos los clientes del lote — misma lógica que el
-    // formulario web (match case-insensitive por nombre), sin crear duplicados.
+    // 1. El cliente tiene que existir de antes — ya no se autocrea acá. Se
+    // valida todo el lote de una: si falta alguno, no se crea ningún
+    // presupuesto (mismo criterio atómico que el insert final). El trigger
+    // trg_validar_cliente_presupuesto en Supabase es la barrera real, esto
+    // solo da un mensaje de error más específico para el bot/asistente.
     const { data: clientesExistentes, error: clientesError } = await supabase
       .from('clientes')
-      .select('id_cli, nombre');
+      .select('nombre')
+      .eq('activo', true);
     if (clientesError) throw new Error(`Error leyendo clientes: ${clientesError.message}`);
 
-    const clientesIds = (clientesExistentes ?? []).map((c) => c.id_cli);
     const nombresConocidos = new Set((clientesExistentes ?? []).map((c) => c.nombre.trim().toLowerCase()));
-    const clientesNuevos: { id_cli: string; nombre: string; activo: boolean }[] = [];
-    for (const item of parsed) {
-      const key = item.cliente.toLowerCase();
-      if (!nombresConocidos.has(key)) {
-        const idCli = nextSeqId('CLI', [...clientesIds, ...clientesNuevos.map((c) => c.id_cli)]);
-        clientesNuevos.push({ id_cli: idCli, nombre: item.cliente, activo: true });
-        nombresConocidos.add(key);
-      }
-    }
-    if (clientesNuevos.length > 0) {
-      const { error: insertClientesError } = await supabase.from('clientes').insert(clientesNuevos);
-      if (insertClientesError) throw new Error(`Error creando clientes: ${insertClientesError.message}`);
+    const clientesFaltantes = [...new Set(parsed.filter((item) => !nombresConocidos.has(item.cliente.toLowerCase())).map((item) => item.cliente))];
+    if (clientesFaltantes.length > 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `CLIENTE_NO_EXISTE: ${clientesFaltantes.map((c) => `"${c}"`).join(', ')} no ${clientesFaltantes.length > 1 ? 'existen' : 'existe'} como cliente. Hay que crearlo antes de crear el presupuesto.`,
+          clientesFaltantes,
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     // 2. Calcular la secuencia de IDs de presupuesto una sola vez para todo el lote

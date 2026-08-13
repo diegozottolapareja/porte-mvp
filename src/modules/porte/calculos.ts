@@ -2,7 +2,7 @@ import { MOCK_INGRESOS, type Ingreso } from './data/ingresos'
 import { MOCK_EGRESOS, type Egreso } from './data/egresos'
 import type { Venta } from './data/ventas'
 import type { Presupuesto } from './data/presupuestos'
-import type { EstadoCobro, RentabilidadRating } from './data/config'
+import type { EstadoCobro, RentabilidadRating, CondicionPago, TipoCaja } from './data/config'
 
 // ─── Derivados de una venta — no se guardan, se calculan en runtime ──────────
 // Aceptan `ingresos`/`egresos` opcionales para leer del store en runtime;
@@ -32,6 +32,30 @@ export function getDesvioCosto(venta: Venta, egresos: Egreso[] = MOCK_EGRESOS): 
   return getTotalEgresado(venta.id, egresos) - getCostoEstimado(venta)
 }
 
+export interface CosteRealCategoria {
+  categoria: string
+  total: number
+}
+
+/**
+ * Coste real de la venta, agrupado por categoría de egreso — excluye la
+ * categoría IMPUESTOS y los egresos en estado Pendiente (no representan
+ * salida efectiva todavía). No incluye lógica de compra-vs-pago ni de caja:
+ * es una lectura directa de los egresos asociados (id_obra = venta.id).
+ */
+export function getCosteRealPorCategoria(ventaId: string, egresos: Egreso[] = MOCK_EGRESOS): CosteRealCategoria[] {
+  const relevantes = egresos.filter(e => e.activo && e.id === ventaId && e.estado !== 'Pendiente' && e.categoria !== 'IMPUESTOS')
+  const porCategoria = new Map<string, number>()
+  for (const e of relevantes) {
+    porCategoria.set(e.categoria, (porCategoria.get(e.categoria) ?? 0) + e.monto)
+  }
+  return [...porCategoria.entries()].map(([categoria, total]) => ({ categoria, total }))
+}
+
+export function getCosteRealTotal(ventaId: string, egresos: Egreso[] = MOCK_EGRESOS): number {
+  return getCosteRealPorCategoria(ventaId, egresos).reduce((sum, c) => sum + c.total, 0)
+}
+
 /** Estado financiero de la obra según lo cobrado — eje independiente del estado de taller (estadoOp). */
 export function getEstadoCobro(venta: Venta, ingresos: Ingreso[] = MOCK_INGRESOS): EstadoCobro {
   const cobrado = getTotalCobrado(venta.id, ingresos)
@@ -56,22 +80,18 @@ export function getRentabilidadRating(venta: Venta, egresos: Egreso[] = MOCK_EGR
   return 'Mala'
 }
 
-// ─── Transición Presupuesto → Venta (mismo momento en que estadoComercial pasa a 'Aceptado') ──
-// Función pura para que sea trivial de mover al backend: no toca estado de React,
-// solo recibe datos y devuelve el resultado de la transición.
+// ─── Transición Presupuesto → Venta ────────────────────────────────────────
+// Flujo en dos pasos: Aceptar (solo cambia estadoComercial) → completar
+// Condiciones comerciales → Convertir en venta (recién ahí se crea la Venta,
+// congelando los costos del presupuesto). Funciones puras: no tocan estado de
+// React, solo reciben datos y devuelven el resultado — trivial de mover al backend.
 
 export type NuevaVenta = Omit<Venta, 'createdAt' | 'createdBy' | 'updatedAt'>
-
-export interface ResultadoAceptacion {
-  venta?: NuevaVenta
-  errorValidacion?: string
-  duplicado?: boolean
-}
 
 export function validarPresupuestoParaVenta(p: Pick<Presupuesto, 'cliente' | 'montoTotal'>): string | undefined {
   const montoValido = typeof p.montoTotal === 'number' && Number.isFinite(p.montoTotal) && p.montoTotal > 0
   if (!p.cliente?.trim() || !montoValido) {
-    return 'No se puede aceptar un presupuesto sin cliente o sin monto cargado'
+    return 'No se puede convertir un presupuesto sin cliente o sin monto cargado'
   }
   return undefined
 }
@@ -94,22 +114,24 @@ export function construirVentaDesdePresupuesto(p: Presupuesto, ahora: string): N
   }
 }
 
-/** Idempotente: si ya existe una venta con ese id no crea un duplicado (equivalente a WARNING_DUPLICADO). */
-export function procesarAceptacionPresupuesto(
-  p: Presupuesto,
-  ventasExistentes: Venta[],
-  ahora: string,
-): ResultadoAceptacion {
-  const errorValidacion = validarPresupuestoParaVenta(p)
-  if (errorValidacion) return { errorValidacion }
+// Condiciones comerciales obligatorias para convertir un presupuesto Aceptado
+// en Venta — entregaReal queda afuera a propósito: se completa después desde
+// el detalle de la venta. Espejo en JS de trg_validar_condiciones_comerciales
+// (Supabase), que es la barrera real, no bypasseable desde el frontend.
+export interface CondicionesComerciales {
+  condPago: CondicionPago
+  vencCobro: string
+  cajaIntenc: TipoCaja
+  entregaCompr: string
+  respOp: string
+  dias?: number
+}
 
-  if (ventasExistentes.some(v => v.id === p.id)) {
-    // eslint-disable-next-line no-console
-    console.warn(`WARNING_DUPLICADO: ya existe una venta para ${p.id}, se omite la creación`)
-    return { duplicado: true }
+export function validarCondicionesComerciales(c: Partial<CondicionesComerciales>): string | undefined {
+  if (!c.condPago || !c.vencCobro || !c.cajaIntenc || !c.entregaCompr || !c.respOp?.trim()) {
+    return 'Completá condición de pago, vencimiento de cobro, caja intención, entrega comprometida y responsable'
   }
-
-  return { venta: construirVentaDesdePresupuesto(p, ahora) }
+  return undefined
 }
 
 export function presupuestoTieneVentaAsociada(id: string, ventas: Venta[]): boolean {

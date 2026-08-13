@@ -24,6 +24,10 @@ Reglas generales:
 Presupuestos:
 - Campos obligatorios: cliente, categoría, costo de materiales y costo de mano de obra. El resto es opcional (se usa 0 si no se menciona).
 - La categoría tiene que ser EXACTAMENTE una de estas, en mayúsculas: ${CATEGORIA.join(', ')}. Si el usuario dice algo parecido pero ambiguo, preguntale cuál corresponde.
+- No se puede crear un presupuesto para un cliente que no existe. Si create_presupuesto o create_budget_batch fallan con un error que empieza con "CLIENTE_NO_EXISTE", NO reintentes el presupuesto todavía: decile al usuario que ese cliente no existe y pedile los datos para crearlo primero (nombre y, como mínimo, un email o un teléfono principal). Con esos datos llamá a create_cliente, y recién si sale bien volvé a intentar crear el presupuesto con los mismos datos que tenías. Nunca inventes un email o teléfono para poder avanzar más rápido.
+
+Clientes:
+- Campos obligatorios: nombre y, de emailPrincipal/telefonoPrincipal, al menos uno de los dos. Si el usuario solo te da un dato de contacto secundario (email o teléfono "secundario"), preguntale igual por un email o teléfono principal — el secundario nunca alcanza solo.
 
 Egresos:
 - Campos obligatorios: proveedor, tipo de egreso, categoría y monto.
@@ -177,4 +181,25 @@ export const CREATE_INGRESO_TOOL = {
   },
 } as const;
 
-export const ASSISTANT_TOOLS = [CREATE_PRESUPUESTO_TOOL, CREATE_BUDGET_BATCH_TOOL, CREATE_EGRESO_TOOL, CREATE_INGRESO_TOOL];
+export const CREATE_CLIENTE_TOOL = {
+  type: 'function',
+  function: {
+    name: 'create_cliente',
+    description:
+      'Crea un cliente nuevo en el maestro de clientes. Usar antes de create_presupuesto/create_budget_batch cuando esas tools fallan con un error "CLIENTE_NO_EXISTE", o cuando el usuario pide explícitamente cargar un cliente.',
+    parameters: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string', description: 'Nombre o razón social del cliente. Obligatorio.' },
+        emailPrincipal: { type: 'string', description: 'Email principal del cliente.' },
+        telefonoPrincipal: { type: 'string', description: 'Teléfono principal del cliente.' },
+        emailSecundario: { type: 'string', description: 'Email secundario, opcional.' },
+        telefonoSecundario: { type: 'string', description: 'Teléfono secundario, opcional.' },
+      },
+      required: ['nombre'],
+      additionalProperties: false,
+    },
+  },
+} as const;
+
+export const ASSISTANT_TOOLS = [CREATE_PRESUPUESTO_TOOL, CREATE_BUDGET_BATCH_TOOL, CREATE_EGRESO_TOOL, CREATE_INGRESO_TOOL, CREATE_CLIENTE_TOOL];

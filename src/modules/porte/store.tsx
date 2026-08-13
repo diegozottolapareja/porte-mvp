@@ -6,11 +6,11 @@ import type { Egreso } from './data/egresos'
 import type { Presupuesto } from './data/presupuestos'
 import type { Venta } from './data/ventas'
 import type { Proveedor } from './data/proveedores'
-import type { Cliente } from './data/clientes'
+import type { Cliente, ClienteUpdate } from './data/clientes'
 import type { GastoFijo } from './data/gastosFijos'
 import type { Variacion } from './data/variaciones'
 import type { Aprendizaje } from './data/aprendizajes'
-import { procesarAceptacionPresupuesto } from './calculos'
+import { validarPresupuestoParaVenta, construirVentaDesdePresupuesto, validarCondicionesComerciales, type CondicionesComerciales } from './calculos'
 import {
   rowToIngreso, ingresoToRow, rowToEgreso, egresoToRow, rowToPresupuesto, presupuestoToRow,
   rowToVenta, ventaToRow, rowToProveedor, proveedorToRow, rowToCliente, clienteToRow, rowToGastoFijo, gastoFijoToRow,
@@ -77,7 +77,7 @@ interface PorteDataContextType {
   updatePresupuesto: (id: string, data: Partial<Presupuesto>) => void
   updateVenta: (id: string, data: Partial<Venta>) => void
   updateProveedor: (idProv: string, data: Partial<Proveedor>) => void
-  updateCliente: (idCli: string, data: Partial<Cliente>) => void
+  updateCliente: (idCli: string, data: ClienteUpdate) => void
   updateGastoFijo: (id: string, data: Partial<GastoFijo>) => void
   updateVariacion: (idVar: string, data: Partial<Variacion>) => void
   updateAprendizaje: (idApr: string, data: Partial<Aprendizaje>) => void
@@ -93,16 +93,31 @@ interface PorteDataContextType {
   nextPresupuestoId: () => string
 
   /**
-   * Transición Presupuesto → Venta: crea la venta en el mismo acto en que el
-   * presupuesto pasa a 'Aceptado'. Idempotente (no duplica si la venta ya existe).
-   * Valida del lado del cliente para feedback inmediato — el trigger de la base
-   * (fn_aceptar_presupuesto) es la barrera real, no bypasseable desde el frontend.
+   * Paso 1 del flujo Presupuesto → Venta: solo cambia estadoComercial a
+   * 'Aceptado'. Ya NO crea la venta — eso pasa recién en convertirEnVenta(),
+   * una vez completas las condiciones comerciales.
    */
   aceptarPresupuesto: (
     id: string,
-    userId: string,
     overrides?: Partial<Presupuesto>,
-  ) => { ok: true; venta?: Venta; duplicado?: boolean } | { ok: false; error: string }
+  ) => { ok: true } | { ok: false; error: string }
+
+  /**
+   * Paso 2: crea la Venta congelando los costos del presupuesto + las
+   * condiciones comerciales cargadas. Requiere que el presupuesto esté
+   * 'Aceptado' y que todavía no tenga una venta asociada (idempotente).
+   * Valida del lado del cliente para feedback inmediato — el trigger de la
+   * base (trg_validar_condiciones_comerciales) es la barrera real. A
+   * diferencia del resto de las mutaciones del store, espera la confirmación
+   * real de Supabase antes de tocar el estado local: es el único flujo donde
+   * una inserción puede fallar legítimamente (trigger o PK duplicada por
+   * doble submit) y un "éxito" optimista dejaría una venta fantasma.
+   */
+  convertirEnVenta: (
+    presupuestoId: string,
+    condiciones: CondicionesComerciales,
+    userId: string,
+  ) => Promise<{ ok: true; venta: Venta } | { ok: false; error: string }>
 
   removeIngreso: (ref: string) => void
   removeEgreso: (ref: string) => void
@@ -249,7 +264,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     const nombreTrim = nombre.trim()
     const existente = clientes.find(c => c.nombre.trim().toLowerCase() === nombreTrim.toLowerCase())
     if (existente) return existente
-    return addCliente({ nombre: nombreTrim, contacto: '', telefono: '' }, userId)
+    return addCliente({ nombre: nombreTrim }, userId)
   }
 
   const addGastoFijo: PorteDataContextType['addGastoFijo'] = (data, userId) => {
@@ -296,30 +311,68 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       .then(({ error }) => { if (error) logPersistError('updatePresupuesto', error) })
   }
 
-  const aceptarPresupuesto: PorteDataContextType['aceptarPresupuesto'] = (id, userId, overrides) => {
+  const aceptarPresupuesto: PorteDataContextType['aceptarPresupuesto'] = (id, overrides) => {
     const existente = presupuestos.find(p => p.id === id)
     if (!existente) return { ok: false, error: 'Presupuesto no encontrado' }
 
-    const candidato = { ...existente, ...overrides, estadoComercial: 'Aceptado' as const }
-    const now = new Date().toISOString()
-    const resultado = procesarAceptacionPresupuesto(candidato, ventas, now)
-    if (resultado.errorValidacion) return { ok: false, error: resultado.errorValidacion }
+    const candidato = { ...existente, ...overrides }
+    const errorValidacion = validarPresupuestoParaVenta(candidato)
+    if (errorValidacion) return { ok: false, error: errorValidacion }
 
+    const now = new Date().toISOString()
     setPresupuestos(prev => prev.map(p => p.id === id ? { ...p, ...overrides, estadoComercial: 'Aceptado', updatedAt: now } : p))
 
-    let ventaCreada: Venta | undefined
-    if (resultado.venta) {
-      ventaCreada = { ...resultado.venta, createdAt: now, createdBy: userId, updatedAt: now }
-      setVentas(prev => [ventaCreada!, ...prev])
-    }
-
-    // El update dispara fn_aceptar_presupuesto en la base, que crea la venta real
-    // (idempotente vía on conflict do nothing) — el insert local ya hecho arriba
-    // queda como espejo optimista, sin duplicar nada del lado del servidor.
     supabase.from('presupuestos').update({ ...presupuestoToRow(overrides ?? {}), estado_comercial: 'Aceptado', updated_at: now }).eq('id', id)
       .then(({ error }) => { if (error) logPersistError('aceptarPresupuesto', error) })
 
-    return { ok: true, venta: ventaCreada, duplicado: resultado.duplicado }
+    return { ok: true }
+  }
+
+  const convertirEnVenta: PorteDataContextType['convertirEnVenta'] = async (presupuestoId, condiciones, userId) => {
+    const presupuesto = presupuestos.find(p => p.id === presupuestoId)
+    if (!presupuesto) return { ok: false, error: 'Presupuesto no encontrado' }
+    if (presupuesto.estadoComercial !== 'Aceptado') {
+      return { ok: false, error: 'El presupuesto tiene que estar Aceptado antes de convertirlo en venta' }
+    }
+    if (ventas.some(v => v.id === presupuestoId)) {
+      return { ok: false, error: 'Ya existe una venta para este presupuesto' }
+    }
+
+    const errorPresupuesto = validarPresupuestoParaVenta(presupuesto)
+    if (errorPresupuesto) return { ok: false, error: errorPresupuesto }
+
+    const errorCondiciones = validarCondicionesComerciales(condiciones)
+    if (errorCondiciones) return { ok: false, error: errorCondiciones }
+
+    const now = new Date().toISOString()
+    const nuevaVenta: Venta = {
+      ...construirVentaDesdePresupuesto(presupuesto, now),
+      condPago: condiciones.condPago,
+      vencCobro: condiciones.vencCobro,
+      cajaIntenc: condiciones.cajaIntenc,
+      entregaCompr: condiciones.entregaCompr,
+      respOp: condiciones.respOp.trim(),
+      dias: condiciones.dias,
+      createdAt: now,
+      createdBy: userId,
+      updatedAt: now,
+    }
+
+    // A diferencia del resto del store, acá se espera la confirmación real de
+    // Supabase antes de tocar el estado local — este insert puede fallar
+    // legítimamente (trigger de condiciones comerciales, PK duplicada por
+    // doble submit) y un "éxito" optimista dejaría una venta fantasma.
+    const { error } = await supabase
+      .from('ventas')
+      .insert({ ...ventaToRow(nuevaVenta), created_by: userId, created_at: now, updated_at: now })
+
+    if (error) {
+      logPersistError('convertirEnVenta', error)
+      return { ok: false, error: 'No se pudo guardar la venta. Intentá de nuevo.' }
+    }
+
+    setVentas(prev => [nuevaVenta, ...prev])
+    return { ok: true, venta: nuevaVenta }
   }
 
   const updateIngreso: PorteDataContextType['updateIngreso'] = (ref, data) => {
@@ -350,7 +403,14 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   }
   const updateCliente: PorteDataContextType['updateCliente'] = (idCli, data) => {
     const now = new Date().toISOString()
-    setClientes(prev => prev.map(c => c.idCli === idCli ? { ...c, ...data, updatedAt: now } : c))
+    // `data` puede traer `null` en los campos de contacto (borrado intencional) —
+    // para el estado local, que solo conoce `string | undefined`, un borrado se
+    // representa como `undefined`; el `null` real solo le importa a la fila de
+    // Supabase (clienteToRow lo traduce a NULL).
+    const localData: Partial<Cliente> = Object.fromEntries(
+      Object.entries(data).map(([key, value]) => [key, value === null ? undefined : value]),
+    )
+    setClientes(prev => prev.map(c => c.idCli === idCli ? { ...c, ...localData, updatedAt: now } : c))
     supabase.from('clientes').update({ ...clienteToRow(data), updated_at: now }).eq('id_cli', idCli)
       .then(({ error }) => { if (error) logPersistError('updateCliente', error) })
   }
@@ -407,6 +467,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
         refetch: loadAll,
         nextPresupuestoId,
         aceptarPresupuesto,
+        convertirEnVenta,
         removeIngreso, removeEgreso,
         softDeleteIngreso, softDeleteEgreso, softDeletePresupuesto, softDeleteProveedor, softDeleteCliente, softDeleteGastoFijo, softDeleteVariacion, softDeleteAprendizaje,
         findDuplicateIngreso, findDuplicateEgreso,
