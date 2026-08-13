@@ -1,6 +1,11 @@
-import ExcelJS from 'exceljs';
-import mammoth from 'mammoth';
+import type ExcelJS from 'exceljs';
 import { DOCUMENT_EXTRACTION_SCHEMA, type DocumentExtractionEnvelope } from './documentSchemas';
+
+// exceljs/mammoth se importan dinámicamente dentro de extractXlsxText/
+// extractDocxText (no acá arriba) — son dependencias pesadas que solo hacen
+// falta para esos dos formatos, y mantenerlas fuera del import estático evita
+// que el bundler de Vercel las arrastre en cada cold start de esta función
+// (que también procesa PDF/imagen, el caso más común).
 
 // Prefijo "_" — código compartido dentro del bundle de /api, no una ruta.
 //
@@ -52,7 +57,8 @@ function truncate(text: string): string {
 }
 
 async function extractXlsxText(bytes: Uint8Array): Promise<string> {
-  const workbook = new ExcelJS.Workbook();
+  const { default: ExcelJSRuntime } = await import('exceljs');
+  const workbook = new ExcelJSRuntime.Workbook();
   // exceljs trae su propio @types/node (v14, Buffer no genérico) como
   // dependencia transitiva, distinto del @types/node del workspace (v25,
   // Buffer genérico) — son dos tipos "Buffer" nominales incompatibles para
@@ -70,7 +76,8 @@ async function extractXlsxText(bytes: Uint8Array): Promise<string> {
 }
 
 async function extractDocxText(bytes: Uint8Array): Promise<string> {
-  const { value } = await mammoth.extractRawText({ buffer: Buffer.from(bytes) });
+  const { default: mammothRuntime } = await import('mammoth');
+  const { value } = await mammothRuntime.extractRawText({ buffer: Buffer.from(bytes) });
   return truncate(value);
 }
 
