@@ -19,3 +19,9 @@ dist
 Thumbs.db
 .vercel
 .env*
+
+# Cache local de la CLI de Supabase (link al proyecto, versiones, etc.)
+supabase/.temp
+
+# Logs/snapshots de sesiones de Playwright MCP
+.playwright-mcp

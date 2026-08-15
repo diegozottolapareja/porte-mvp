@@ -153,26 +153,3 @@ export function validateBudget(data: ExtractedDocumentData): ValidationResult<Pr
   };
 }
 
-export function validateBudgetGroup(documents: ExtractedDocumentData[]): ValidationResult<PresupuestoPayload[]> {
-  if (documents.length === 0) return { ok: false, missingFields: ['documents'], warnings: [] };
-
-  const results = documents.map(validateBudget);
-  const invalidIndexes = results
-    .map((r, i) => (r.ok ? null : i))
-    .filter((i): i is number => i !== null);
-
-  if (invalidIndexes.length > 0) {
-    return {
-      ok: false,
-      missingFields: invalidIndexes.map((i) => `presupuesto #${i + 1}: ${results[i].missingFields.join(', ')}`),
-      warnings: [],
-    };
-  }
-
-  return {
-    ok: true,
-    payload: results.map((r) => r.payload!),
-    missingFields: [],
-    warnings: results.flatMap((r, i) => (r.warnings.length > 0 ? [`presupuesto #${i + 1} (${r.payload!.cliente}): ${r.warnings.join('; ')}`] : [])),
-  };
-}

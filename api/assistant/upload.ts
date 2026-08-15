@@ -1,6 +1,7 @@
 import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin.js';
 import { processDocument } from '../_lib/documentProcessingService.js';
-import { validateExpense, validateIncome, validateBudget, validateBudgetGroup, type PresupuestoPayload } from '../_lib/documentValidation.js';
+import { validateExpense, validateIncome, validateBudget, type PresupuestoPayload } from '../_lib/documentValidation.js';
+import { executeAction } from '../_lib/actionExecutor.js';
 import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/documentSchemas.js';
 
 export const config = { runtime: 'edge' };
@@ -12,9 +13,14 @@ export const config = { runtime: 'edge' };
 // la autenticación en producción con "request.headers.get is not a
 // function", enmascarado antes por el bug de resolución de módulos ESM.
 //
-// Nunca ejecuta ninguna acción acá: clasifica, extrae, valida y deja el
-// resultado en `conversations.pending_extraction`. La confirmación por texto
-// o voz (api/assistant/message.ts) es la que dispara el Action Executor.
+// Egresos/ingresos: clasifica, extrae, valida y deja el resultado en
+// `conversations.pending_extraction` — la confirmación por texto o voz
+// (api/assistant/message.ts) es la que dispara el Action Executor.
+//
+// Presupuestos (budget/budget_group): se crean directo acá, en el mismo
+// request — el upload en sí es la acción, sin pasar por "¿lo cargo?" en el
+// chat (el cliente, si no existe, se crea con contacto placeholder). No hay
+// otra forma de confirmarlo aparte de subir el archivo.
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
@@ -70,37 +76,29 @@ function summarizeIncome(fileName: string, data: ExtractedDocumentData): { text:
   };
 }
 
-function summarizeBudget(fileName: string, data: ExtractedDocumentData): { text: string; ready: boolean; payload?: PresupuestoPayload } {
-  const validation = validateBudget(data);
-  if (!validation.ok) {
-    return { text: `"${fileName}": no pude identificar el cliente en el documento — ese dato no lo puedo inventar, ¿me decís para quién es este presupuesto?`, ready: false };
-  }
-  const p = validation.payload!;
-  const total = p.costoMat + p.costoMo + (p.indVendidos ?? 0) + (p.impuestos ?? 0) + (p.comercial ?? 0) + (p.beneficio ?? 0);
-  const incompleteNote = p.estadoComercial === 'Incompleto'
-    ? ` — ojo: ${validation.warnings.join('; ')}. Lo voy a marcar "Incompleto" para que lo revises después`
-    : '';
-  return {
-    text: `"${fileName}": encontré un presupuesto para ${p.cliente} (${p.categoria}) por $${total.toLocaleString('es-AR')}${incompleteNote}. ¿Lo cargo?`,
-    ready: true,
-    payload: p,
-  };
+// Los presupuestos extraídos de un documento se crean directo en este mismo
+// request (sin pasar por "¿lo cargo?" en el chat) — ver handler más abajo.
+
+interface BudgetItem {
+  assistantDocId: string;
+  payload: PresupuestoPayload;
+  summaryRef: FileSummary;
 }
 
-function summarizeBudgetGroup(fileName: string, documents: ExtractedDocumentData[]): { text: string; ready: boolean; payload?: PresupuestoPayload[] } {
-  const validation = validateBudgetGroup(documents);
-  if (!validation.ok) {
-    return { text: `"${fileName}": encontré varios presupuestos, pero a algunos no les pude identificar el cliente: ${validation.missingFields.join(' / ')}. ¿Los revisamos?`, ready: false };
-  }
-  const payload = validation.payload!;
-  const total = payload.reduce((acc, p) => acc + p.costoMat + p.costoMo + (p.indVendidos ?? 0) + (p.impuestos ?? 0) + (p.comercial ?? 0) + (p.beneficio ?? 0), 0);
-  const incompletos = payload.filter((p) => p.estadoComercial === 'Incompleto').length;
-  const incompleteNote = incompletos > 0 ? ` (${incompletos} con datos que faltaban en el documento — quedan marcados "Incompleto" para revisar después)` : '';
-  return {
-    text: `"${fileName}": encontré ${payload.length} presupuestos por un total de $${total.toLocaleString('es-AR')}${incompleteNote}. ¿Los importo todos?`,
-    ready: true,
-    payload,
-  };
+type ClienteStatus = 'existing' | 'created' | 'create_failed';
+
+function normalizeCliente(nombre: string): string {
+  return nombre.trim().toLowerCase();
+}
+
+function formatBudgetLine(payload: PresupuestoPayload, createdId: string, montoTotal: number, clienteStatus: ClienteStatus): string {
+  const clienteNote = clienteStatus === 'created'
+    ? 'cliente nuevo (contacto pendiente de completar)'
+    : clienteStatus === 'create_failed'
+      ? 'no se pudo verificar el cliente'
+      : 'cliente ya existente';
+  const incompleteNote = payload.estadoComercial === 'Incompleto' ? ' Quedó marcado "Incompleto" para revisar a mano.' : '';
+  return `${createdId} para "${payload.cliente}" ($${montoTotal.toLocaleString('es-AR')}) — ${clienteNote}.${incompleteNote}`;
 }
 
 export default async function handler(request: Request) {
@@ -149,6 +147,9 @@ export default async function handler(request: Request) {
 
     const summaries: FileSummary[] = [];
     let primary: { documentType: string; data: unknown; ready: boolean } | undefined;
+    const budgetItems: BudgetItem[] = [];
+    const linesBySummary = new Map<FileSummary, string[]>();
+    const skippedBySummary = new Map<FileSummary, number>();
 
     for (const file of files) {
       const name = sanitizeFileName(file.name);
@@ -166,14 +167,27 @@ export default async function handler(request: Request) {
       const fileHash = await sha256Hex(bytes);
 
       try {
+        // Dedupe global (no por conversación): si este archivo ya generó un
+        // presupuesto antes — en esta conversación o en otra — no se reprocesa
+        // ni se vuelve a crear nada.
         const { data: cached } = await supabase
           .from('assistant_documents')
-          .select('document_type, data, confidence')
-          .eq('conversation_id', conversationId)
+          .select('document_type, data, confidence, used_action_ids')
           .eq('file_hash', fileHash)
           .not('document_type', 'is', null)
+          .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
+
+        if (cached && Array.isArray(cached.used_action_ids) && cached.used_action_ids.length > 0) {
+          summaries.push({
+            name,
+            size: file.size,
+            documentType: cached.document_type ?? undefined,
+            summary: `"${name}": ya había sido cargado (presupuesto ${cached.used_action_ids.join(', ')}) — no se hizo ninguna acción.`,
+          });
+          continue;
+        }
 
         let envelope: DocumentExtractionEnvelope;
         let usage = { promptTokens: 0, completionTokens: 0 };
@@ -186,50 +200,76 @@ export default async function handler(request: Request) {
           usage = processed.usage;
         }
 
-        let summaryLine: string;
-        let ready = false;
-        // Para budget/budget_group, lo que va a pending_extraction es el payload ya
-        // validado y con defaults aplicados (validateBudget/validateBudgetGroup) —
-        // no el envelope crudo — así el modelo solo repite esos campos tal cual al
-        // llamar a la tool, sin tener que recalcular defaults por su cuenta.
-        let pendingData: unknown = envelope.documentType === 'budget_group' ? envelope.documents : envelope.data;
+        const { data: insertedDoc, error: insertDocError } = await supabase
+          .from('assistant_documents')
+          .insert({
+            conversation_id: conversationId,
+            file_name: name,
+            mime_type: file.type,
+            size_bytes: file.size,
+            file_hash: fileHash,
+            document_type: envelope.documentType,
+            confidence: envelope.confidence,
+            data: envelope.documentType === 'budget_group' ? { documents: envelope.documents } : { data: envelope.data },
+            prompt_tokens: usage.promptTokens,
+            completion_tokens: usage.completionTokens,
+          })
+          .select('id')
+          .single();
+        if (insertDocError || !insertedDoc) throw new Error(`Error guardando el documento: ${insertDocError?.message}`);
+        const assistantDocId = insertedDoc.id as string;
 
         if (envelope.documentType === 'expense' && envelope.data) {
-          ({ text: summaryLine, ready } = summarizeExpense(name, envelope.data));
+          const { text, ready } = summarizeExpense(name, envelope.data);
+          summaries.push({ name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: text });
+          if (!primary) primary = { documentType: envelope.documentType, data: envelope.data, ready };
         } else if (envelope.documentType === 'income' && envelope.data) {
-          ({ text: summaryLine, ready } = summarizeIncome(name, envelope.data));
+          const { text, ready } = summarizeIncome(name, envelope.data);
+          summaries.push({ name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: text });
+          if (!primary) primary = { documentType: envelope.documentType, data: envelope.data, ready };
         } else if (envelope.documentType === 'budget' && envelope.data) {
-          const result = summarizeBudget(name, envelope.data);
-          summaryLine = result.text;
-          ready = result.ready;
-          if (result.payload) pendingData = result.payload;
+          // Presupuesto único: se crea directo más abajo, junto con el resto del
+          // lote — acá solo se valida y se deja reservado el lugar del reporte.
+          const validation = validateBudget(envelope.data);
+          const summaryEntry: FileSummary = { name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: '' };
+          summaries.push(summaryEntry);
+          if (validation.ok) {
+            budgetItems.push({ assistantDocId, payload: validation.payload!, summaryRef: summaryEntry });
+          } else {
+            summaryEntry.summary = `"${name}": encontré un presupuesto pero no pude identificar el cliente en el documento — no lo cargué, ese dato no lo puedo inventar. Decime quién es o cargalo a mano.`;
+            summaryEntry.error = 'missing_cliente';
+          }
         } else if (envelope.documentType === 'budget_group' && envelope.documents) {
-          const result = summarizeBudgetGroup(name, envelope.documents);
-          summaryLine = result.text;
-          ready = result.ready;
-          if (result.payload) pendingData = result.payload;
+          // Documento con varios presupuestos: cada uno se valida por separado —
+          // los que no tienen cliente se saltean sin bloquear a los demás.
+          const summaryEntry: FileSummary = { name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: '' };
+          summaries.push(summaryEntry);
+          let pushed = 0;
+          let skipped = 0;
+          for (const doc of envelope.documents) {
+            const validation = validateBudget(doc);
+            if (validation.ok) {
+              budgetItems.push({ assistantDocId, payload: validation.payload!, summaryRef: summaryEntry });
+              pushed++;
+            } else {
+              skipped++;
+            }
+          }
+          if (pushed === 0) {
+            summaryEntry.summary = `"${name}": encontré ${envelope.documents.length} presupuestos, pero no pude identificar el cliente en ninguno — no cargué ninguno.`;
+            summaryEntry.error = 'missing_cliente';
+          } else if (skipped > 0) {
+            skippedBySummary.set(summaryEntry, skipped);
+          }
         } else {
-          summaryLine = `"${name}": no pude identificar con seguridad qué tipo de documento es (confianza ${Math.round((envelope.confidence ?? 0) * 100)}%). ¿Es un egreso, un ingreso o un presupuesto?`;
+          summaries.push({
+            name,
+            size: file.size,
+            documentType: envelope.documentType,
+            confidence: envelope.confidence,
+            summary: `"${name}": no pude identificar con seguridad qué tipo de documento es (confianza ${Math.round((envelope.confidence ?? 0) * 100)}%). ¿Es un egreso, un ingreso o un presupuesto?`,
+          });
         }
-
-        summaries.push({ name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: summaryLine });
-
-        if (!primary && envelope.documentType !== 'unknown') {
-          primary = { documentType: envelope.documentType, data: pendingData, ready };
-        }
-
-        await supabase.from('assistant_documents').insert({
-          conversation_id: conversationId,
-          file_name: name,
-          mime_type: file.type,
-          size_bytes: file.size,
-          file_hash: fileHash,
-          document_type: envelope.documentType,
-          confidence: envelope.confidence,
-          data: envelope.documentType === 'budget_group' ? { documents: envelope.documents } : { data: envelope.data },
-          prompt_tokens: usage.promptTokens,
-          completion_tokens: usage.completionTokens,
-        });
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Error desconocido';
         summaries.push({ name, size: file.size, summary: `"${name}": no pude procesarlo (${message}).`, error: 'processing_failed' });
@@ -242,6 +282,64 @@ export default async function handler(request: Request) {
           error: message,
         });
       }
+    }
+
+    // Todos los presupuestos detectados en este upload (uno o varios archivos,
+    // uno o varios por budget_group) se crean juntos, en un solo lote atómico —
+    // el usuario no confirma nada, el upload en sí ya es la acción.
+    if (budgetItems.length > 0) {
+      const { data: clientesExistentes } = await supabase.from('clientes').select('nombre').eq('activo', true);
+      const nombresConocidos = new Set((clientesExistentes ?? []).map((c) => normalizeCliente(c.nombre)));
+      const clienteStatus = new Map<string, ClienteStatus>();
+
+      for (const item of budgetItems) {
+        const key = normalizeCliente(item.payload.cliente);
+        if (clienteStatus.has(key)) continue;
+        if (nombresConocidos.has(key)) {
+          clienteStatus.set(key, 'existing');
+          continue;
+        }
+        // Un documento comercial externo casi nunca trae el contacto del
+        // cliente — se crea con placeholder en vez de bloquear la carga.
+        const created = await executeAction('create_cliente', { nombre: item.payload.cliente, emailPrincipal: 'pendiente@completar.com' }, user.id);
+        clienteStatus.set(key, created.ok ? 'created' : 'create_failed');
+      }
+
+      const batchResult = await executeAction('create_budget_batch', { items: budgetItems.map((i) => i.payload) }, user.id);
+      const usedIdsByDoc = new Map<string, string[]>();
+
+      if (batchResult.ok) {
+        const creados = (batchResult.data as Array<{ id: string; monto_total: number | null }>) ?? [];
+        budgetItems.forEach((item, i) => {
+          const created = creados[i];
+          if (!created) return;
+          const status = clienteStatus.get(normalizeCliente(item.payload.cliente)) ?? 'existing';
+          const total = created.monto_total ?? (item.payload.costoMat + item.payload.costoMo + (item.payload.indVendidos ?? 0) + (item.payload.impuestos ?? 0) + (item.payload.comercial ?? 0) + (item.payload.beneficio ?? 0));
+
+          if (!linesBySummary.has(item.summaryRef)) linesBySummary.set(item.summaryRef, []);
+          linesBySummary.get(item.summaryRef)!.push(formatBudgetLine(item.payload, created.id, total, status));
+
+          if (!usedIdsByDoc.has(item.assistantDocId)) usedIdsByDoc.set(item.assistantDocId, []);
+          usedIdsByDoc.get(item.assistantDocId)!.push(created.id);
+        });
+
+        for (const [assistantDocId, ids] of usedIdsByDoc) {
+          await supabase.from('assistant_documents').update({ used_action_ids: ids }).eq('id', assistantDocId);
+        }
+      } else {
+        for (const item of budgetItems) {
+          if (!linesBySummary.has(item.summaryRef)) linesBySummary.set(item.summaryRef, []);
+          linesBySummary.get(item.summaryRef)!.push(`"${item.payload.cliente}": no se pudo crear (${batchResult.error}).`);
+        }
+      }
+    }
+
+    for (const [summaryRef, lines] of linesBySummary) {
+      const skipped = skippedBySummary.get(summaryRef);
+      const isGroup = summaryRef.documentType === 'budget_group';
+      const header = isGroup ? `"${summaryRef.name}": se cargaron ${lines.length} presupuesto(s):\n- ` : `"${summaryRef.name}": `;
+      const tail = skipped ? `\n(${skipped} más no se cargaron por falta de cliente)` : '';
+      summaryRef.summary = header + lines.join('\n- ') + tail;
     }
 
     if (primary) {
