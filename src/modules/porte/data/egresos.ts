@@ -18,6 +18,7 @@ export interface Egreso {
   ref: string
   fechaEmision?: string         // solo cheques
   fechaAcreditacion?: string
+  comprobantePath?: string     // path en Storage (bucket "comprobantes") de la factura original, si vino de una carga por PDF
   activo: boolean
   createdAt: string
   createdBy: string

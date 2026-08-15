@@ -79,6 +79,7 @@ interface InvoiceItem {
   assistantDocId: string;
   payload: EgresoPayload;
   summaryRef: FileSummary;
+  comprobantePath?: string;
 }
 
 type EntityStatus = 'existing' | 'created' | 'create_failed';
@@ -229,7 +230,23 @@ export default async function handler(request: Request) {
           const summaryEntry: FileSummary = { name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: '' };
           summaries.push(summaryEntry);
           if (validation.ok) {
-            invoiceItems.push({ assistantDocId, payload: validation.payload!, summaryRef: summaryEntry });
+            // Se guarda el archivo original en Storage para poder verlo después
+            // desde el egreso creado — si falla, no bloquea la carga del egreso,
+            // solo queda sin adjunto.
+            const ext = file.type === 'application/pdf' ? 'pdf' : file.type === 'image/png' ? 'png' : 'jpg';
+            const comprobantePath = `egresos/${assistantDocId}.${ext}`;
+            const { error: uploadError } = await supabase.storage
+              .from('comprobantes')
+              .upload(comprobantePath, bytes, { contentType: file.type });
+            if (uploadError) {
+              console.error('[upload] error guardando comprobante en Storage:', uploadError);
+            }
+            invoiceItems.push({
+              assistantDocId,
+              payload: validation.payload!,
+              summaryRef: summaryEntry,
+              comprobantePath: uploadError ? undefined : comprobantePath,
+            });
           } else {
             summaryEntry.summary = `"${name}": encontré una factura pero no pude identificar el proveedor o el monto en el documento — no la cargué, esos datos no los puedo inventar. Decime esos datos o cargala a mano.`;
             summaryEntry.error = 'missing_proveedor';
@@ -360,7 +377,7 @@ export default async function handler(request: Request) {
         const proveedorStatus: EntityStatus = nombresConocidos.has(key) ? 'existing' : 'created';
         nombresConocidos.add(key);
 
-        const result = await executeAction('create_egreso', { ...item.payload }, user.id);
+        const result = await executeAction('create_egreso', { ...item.payload, comprobantePath: item.comprobantePath }, user.id);
 
         if (!linesBySummary.has(item.summaryRef)) linesBySummary.set(item.summaryRef, []);
         if (result.ok) {

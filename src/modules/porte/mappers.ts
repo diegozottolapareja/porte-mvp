@@ -38,6 +38,7 @@ export function rowToEgreso(r: Row): Egreso {
     fecha: r.fecha, tipoEgreso: r.tipo_egreso, id: r.id_obra ?? undefined, proveedor: r.proveedor_id ?? undefined,
     categoria: r.categoria, monto: Number(r.monto), cuenta: r.cuenta, caja: r.caja, estado: r.estado, ref: r.ref,
     fechaEmision: r.fecha_emision ?? undefined, fechaAcreditacion: r.fecha_acreditacion ?? undefined,
+    comprobantePath: r.comprobante_path ?? undefined,
     activo: r.activo, createdAt: r.created_at, createdBy: r.created_by, updatedAt: r.updated_at,
   }
 }
@@ -54,6 +55,7 @@ export function egresoToRow(e: Partial<Egreso>): Row {
   if (e.estado !== undefined) row.estado = e.estado
   if (e.fechaEmision !== undefined) row.fecha_emision = e.fechaEmision ?? null
   if (e.fechaAcreditacion !== undefined) row.fecha_acreditacion = e.fechaAcreditacion ?? null
+  if (e.comprobantePath !== undefined) row.comprobante_path = e.comprobantePath ?? null
   if (e.activo !== undefined) row.activo = e.activo
   return row
 }

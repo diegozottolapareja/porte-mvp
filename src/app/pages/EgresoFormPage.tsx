@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
+import { FileText } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
@@ -9,6 +10,7 @@ import { useVentas, useProveedores, useEgresos, useEgresoActions } from '@/modul
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
+import { supabase } from '@/lib/supabaseClient'
 
 export default function EgresoFormPage() {
   const navigate = useNavigate()
@@ -74,6 +76,16 @@ export default function EgresoFormPage() {
     }
   }
 
+  const handleVerComprobante = async () => {
+    if (!editing?.comprobantePath) return
+    const { data, error } = await supabase.storage.from('comprobantes').createSignedUrl(editing.comprobantePath, 60)
+    if (error || !data) {
+      toast.error('No se pudo abrir el comprobante')
+      return
+    }
+    window.open(data.signedUrl, '_blank', 'noopener')
+  }
+
   const handleSave = (loadAnother: boolean) => {
     const montoNum = toPositiveAmount(monto)
     if (!montoNum) {
@@ -92,6 +104,12 @@ export default function EgresoFormPage() {
   return (
     <AppShell title={editing ? 'Editar egreso' : 'Nuevo egreso'} onBack={() => navigate(-1)} narrow>
       <div className="max-w-md mx-auto w-full space-y-4">
+        {editing?.comprobantePath && (
+          <button onClick={handleVerComprobante} className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-border rounded-2xl text-sm text-primary font-medium">
+            <FileText className="w-4 h-4" /> Ver comprobante
+          </button>
+        )}
+
         <div>
           <label className="text-sm text-muted-foreground mb-1.5 block">Fecha</label>
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />

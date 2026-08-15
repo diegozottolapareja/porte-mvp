@@ -104,6 +104,7 @@ export default async function handler(request: Request) {
   const proveedorNombre = typeof body.proveedor === 'string' ? body.proveedor.trim() : '';
   const fechaEmision = typeof body.fechaEmision === 'string' && body.fechaEmision ? body.fechaEmision : null;
   const fechaAcreditacion = typeof body.fechaAcreditacion === 'string' && body.fechaAcreditacion ? body.fechaAcreditacion : null;
+  const comprobantePath = typeof body.comprobantePath === 'string' && body.comprobantePath ? body.comprobantePath : null;
   const createdBy = typeof body.createdBy === 'string' && body.createdBy ? body.createdBy : null;
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
@@ -154,10 +155,11 @@ export default async function handler(request: Request) {
         estado,
         fecha_emision: fechaEmision,
         fecha_acreditacion: fechaAcreditacion,
+        comprobante_path: comprobantePath,
         activo: true,
         created_by: createdBy,
       })
-      .select('ref, fecha, tipo_egreso, id_obra, proveedor_id, categoria, monto, cuenta, caja, estado')
+      .select('ref, fecha, tipo_egreso, id_obra, proveedor_id, categoria, monto, cuenta, caja, estado, comprobante_path')
       .single();
     if (insertError) throw new Error(`Error creando egreso: ${insertError.message}`);
 
