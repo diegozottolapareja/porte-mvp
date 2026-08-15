@@ -9,14 +9,15 @@ import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ProveedorDialog } from '@/components/ProveedorDialog'
 import type { Proveedor } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useProveedores, useProveedorActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '@/lib/format'
 
 export default function ProveedoresPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { proveedores, softDeleteProveedor } = usePorteData()
+  const proveedores = useProveedores()
+  const { softDeleteProveedor } = useProveedorActions()
   const [editing, setEditing] = useState<Proveedor | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Proveedor | null>(null)
 

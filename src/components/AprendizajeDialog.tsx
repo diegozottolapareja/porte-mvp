@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/app/components/ui/button'
 import { SearchableSelect } from './SearchableSelect'
 import { CONFIG_LISTS, type Aprendizaje, type CausaDesvio, type Categoria } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useAprendizajeActions } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { todayLocal } from '@/lib/format'
 
@@ -17,7 +17,8 @@ interface AprendizajeDialogProps {
 
 export function AprendizajeDialog({ open, onClose, editing, fixedObra }: AprendizajeDialogProps) {
   const { user } = useAuth()
-  const { ventas, addAprendizaje, updateAprendizaje } = usePorteData()
+  const ventas = useVentas()
+  const { addAprendizaje, updateAprendizaje } = useAprendizajeActions()
 
   const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
 

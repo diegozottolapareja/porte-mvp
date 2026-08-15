@@ -10,7 +10,7 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { Pager } from '@/components/Pager'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ESTADO_COMERCIAL_CONFIG, CONFIG_LISTS, type EstadoComercial, type Presupuesto } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { usePresupuestos, usePresupuestoActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, extractIdSeq } from '@/lib/format'
 
@@ -19,7 +19,8 @@ const PAGE_SIZE = 20
 export default function PresupuestosPage() {
   const navigate = useNavigate()
   const { user, can } = useAuth()
-  const { presupuestos: allPresupuestos, aceptarPresupuesto, updatePresupuesto, softDeletePresupuesto } = usePorteData()
+  const allPresupuestos = usePresupuestos()
+  const { aceptarPresupuesto, updatePresupuesto, softDeletePresupuesto } = usePresupuestoActions()
   const [query, setQuery] = useState('')
   const [estadoFilter, setEstadoFilter] = useState<string>('all')
   const [categoriaFilter, setCategoriaFilter] = useState<string>('all')

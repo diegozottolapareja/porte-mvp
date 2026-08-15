@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/app/components/ui/dialog'
 import { Button } from '@/app/components/ui/button'
 import { CONFIG_LISTS, type Venta, type CondicionPago, type TipoCaja } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentaActions, usePresupuestoActions, useClienteActions } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { isNegativeAmount, toPositiveAmount } from '@/lib/validation'
 
@@ -16,7 +16,9 @@ interface VentaDialogProps {
 // Alta manual de una venta — no todas nacen de un presupuesto aceptado.
 export function VentaDialog({ open, onClose, editing }: VentaDialogProps) {
   const { user } = useAuth()
-  const { addVenta, updateVenta, nextPresupuestoId, findOrCreateCliente } = usePorteData()
+  const { addVenta, updateVenta } = useVentaActions()
+  const { nextPresupuestoId } = usePresupuestoActions()
+  const { findOrCreateCliente } = useClienteActions()
 
   const [cliente, setCliente] = useState(editing?.cliente ?? '')
   const [ventaFinal, setVentaFinal] = useState(editing?.ventaFinal?.toString() ?? '')

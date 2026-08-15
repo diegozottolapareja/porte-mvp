@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect } from 'react'
+import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/app/contexts/AuthContext'
 import type { Ingreso } from './data/ingresos'
@@ -17,10 +18,17 @@ import {
   rowToVariacion, variacionToRow, rowToAprendizaje, aprendizajeToRow,
 } from './mappers'
 
-// ─── Store conectado a Supabase ───────────────────────────────────────────────
-// Carga inicial desde las tablas reales. Las mutaciones actualizan el estado
-// local de inmediato (misma UX que antes) y persisten en Supabase en paralelo;
-// RLS es la barrera real de escritura, esto es solo la capa de UI.
+// ─── Store conectado a Supabase, por entidad, vía React Query ────────────────
+// Cada entidad tiene su propio query key y se carga recién cuando un
+// componente la usa por primera vez (lazy) — no hay un loadAll() que traiga
+// las 9 tablas juntas. React Query resuelve stale-while-revalidate solo:
+// staleTime 0 (default) muestra el cache al instante en cada mount/focus y
+// dispara un refetch en paralelo en segundo plano, y ese refetch (mount o
+// window focus) solo corre para queries con un observer activo — es decir,
+// solo las entidades que el usuario ya visitó, nunca las 9 de una.
+// Las mutaciones actualizan el cache de inmediato (misma UX optimista que
+// antes) y persisten en Supabase en paralelo; RLS es la barrera real de
+// escritura, esto es solo la capa de UI.
 
 function logPersistError(op: string, error: unknown) {
   // eslint-disable-next-line no-console
@@ -45,342 +53,210 @@ function nextSeqId(prefix: string, ids: string[]): string {
 
 export type TableKey = 'ingresos' | 'egresos' | 'presupuestos' | 'ventas' | 'proveedores' | 'clientes' | 'gastosFijos' | 'variaciones' | 'aprendizajes'
 
-interface PorteDataContextType {
-  isLoading: boolean
-  ingresos: Ingreso[]
-  egresos: Egreso[]
-  presupuestos: Presupuesto[]
-  ventas: Venta[]
-  proveedores: Proveedor[]
-  clientes: Cliente[]
-  gastosFijos: GastoFijo[]
-  variaciones: Variacion[]
-  aprendizajes: Aprendizaje[]
+const ALL_TABLE_KEYS: TableKey[] = ['ingresos', 'egresos', 'presupuestos', 'ventas', 'proveedores', 'clientes', 'gastosFijos', 'variaciones', 'aprendizajes']
 
-  addIngreso: (data: Omit<Ingreso, 'ref' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Ingreso
-  addEgreso: (data: Omit<Egreso, 'ref' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Egreso
-  addPresupuesto: (data: Omit<Presupuesto, 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Presupuesto
-  addVenta: (data: Omit<Venta, 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Venta
-  addProveedor: (data: Omit<Proveedor, 'idProv' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Proveedor
-  addCliente: (data: Omit<Cliente, 'idCli' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Cliente
-  /**
-   * Da de alta el cliente en el maestro si el nombre (case-insensitive) no
-   * existe todavía — usado al cargar un presupuesto o una venta con un
-   * nombre de cliente en texto libre, para que el maestro de Clientes se
-   * mantenga sincronizado sin pedirle un paso extra al usuario.
-   */
-  findOrCreateCliente: (nombre: string, userId: string) => Cliente
-  addGastoFijo: (data: Omit<GastoFijo, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => GastoFijo
-  addVariacion: (data: Omit<Variacion, 'idVar' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Variacion
-  addAprendizaje: (data: Omit<Aprendizaje, 'idApr' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string) => Aprendizaje
-
-  updateIngreso: (ref: string, data: Partial<Ingreso>) => void
-  updateEgreso: (ref: string, data: Partial<Egreso>) => void
-  updatePresupuesto: (id: string, data: Partial<Presupuesto>) => void
-  updateVenta: (id: string, data: Partial<Venta>) => void
-  updateProveedor: (idProv: string, data: Partial<Proveedor>) => void
-  updateCliente: (idCli: string, data: ClienteUpdate) => void
-  updateGastoFijo: (id: string, data: Partial<GastoFijo>) => void
-  updateVariacion: (idVar: string, data: Partial<Variacion>) => void
-  updateAprendizaje: (idApr: string, data: Partial<Aprendizaje>) => void
-
-  /**
-   * Re-lee tablas desde Supabase. Necesario después de mutaciones que pasan
-   * por afuera del store (ej. el asistente crea presupuestos/egresos/ingresos
-   * vía el backend con service role) — sin esto, el usuario ve el dato recién
-   * creado solo al recargar la página. Sin argumentos relee las 9 tablas
-   * (uso: carga inicial / re-foco de pestaña); pasando `tables` relee solo
-   * esas — usado por el asistente, que sabe qué tabla tocó su acción.
-   */
-  refetch: (tables?: TableKey[]) => Promise<void>
-
-  nextPresupuestoId: () => string
-
-  /**
-   * Paso 1 del flujo Presupuesto → Venta: solo cambia estadoComercial a
-   * 'Aceptado'. Ya NO crea la venta — eso pasa recién en convertirEnVenta(),
-   * una vez completas las condiciones comerciales.
-   */
-  aceptarPresupuesto: (
-    id: string,
-    overrides?: Partial<Presupuesto>,
-  ) => { ok: true } | { ok: false; error: string }
-
-  /**
-   * Paso 2: crea la Venta congelando los costos del presupuesto + las
-   * condiciones comerciales cargadas. Requiere que el presupuesto esté
-   * 'Aceptado' (ya sea porque ya lo estaba, o porque `overrides` lo marca así
-   * en el mismo llamado) y que todavía no tenga una venta asociada
-   * (idempotente). Valida del lado del cliente para feedback inmediato — el
-   * trigger de la base (trg_validar_condiciones_comerciales) es la barrera
-   * real. A diferencia del resto de las mutaciones del store, espera la
-   * confirmación real de Supabase antes de tocar el estado local: es el único
-   * flujo donde una inserción puede fallar legítimamente (trigger o PK
-   * duplicada por doble submit) y un "éxito" optimista dejaría una venta
-   * fantasma.
-   *
-   * `overrides`: cambios de edición del presupuesto todavía no guardados
-   * (típicamente incluye estadoComercial: 'Aceptado') que se aplican acá en
-   * memoria antes de validar/construir la venta, y se persisten recién si la
-   * venta se creó con éxito. Permite "Aceptar + Convertir" en un solo click
-   * sin encadenar dos llamadas al store (que verían estado stale entre sí).
-   */
-  convertirEnVenta: (
-    presupuestoId: string,
-    condiciones: CondicionesComerciales,
-    userId: string,
-    overrides?: Partial<Presupuesto>,
-  ) => Promise<{ ok: true; venta: Venta } | { ok: false; error: string }>
-
-  removeIngreso: (ref: string) => void
-  removeEgreso: (ref: string) => void
-
-  softDeleteIngreso: (ref: string) => void
-  softDeleteEgreso: (ref: string) => void
-  softDeletePresupuesto: (id: string) => void
-  softDeleteProveedor: (idProv: string) => void
-  softDeleteCliente: (idCli: string) => void
-  softDeleteGastoFijo: (id: string) => void
-  softDeleteVariacion: (idVar: string) => void
-  softDeleteAprendizaje: (idApr: string) => void
-
-  findDuplicateIngreso: (obraId: string, monto: number, fecha: string) => Ingreso | undefined
-  findDuplicateEgreso: (obraId: string | undefined, monto: number, fecha: string) => Egreso | undefined
+function porteKey(table: TableKey): QueryKey {
+  return ['porte', table]
 }
 
-const PorteDataContext = createContext<PorteDataContextType | undefined>(undefined)
+// ─── Fetchers — uno por tabla/vista real de Supabase ─────────────────────────
 
-export function PorteDataProvider({ children }: { children: ReactNode }) {
+async function fetchIngresos(): Promise<Ingreso[]> {
+  const { data, error } = await supabase.from('ingresos').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToIngreso)
+}
+async function fetchEgresos(): Promise<Egreso[]> {
+  const { data, error } = await supabase.from('egresos').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToEgreso)
+}
+async function fetchPresupuestos(): Promise<Presupuesto[]> {
+  const { data, error } = await supabase.from('presupuestos').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToPresupuesto)
+}
+async function fetchVentas(): Promise<Venta[]> {
+  const { data, error } = await supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToVenta)
+}
+async function fetchProveedores(): Promise<Proveedor[]> {
+  const { data, error } = await supabase.from('v_proveedores_saldo').select('*')
+  if (error) throw error
+  return (data ?? []).map(rowToProveedor)
+}
+async function fetchClientes(): Promise<Cliente[]> {
+  const { data, error } = await supabase.from('clientes').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToCliente)
+}
+async function fetchGastosFijos(): Promise<GastoFijo[]> {
+  const { data, error } = await supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToGastoFijo)
+}
+async function fetchVariaciones(): Promise<Variacion[]> {
+  const { data, error } = await supabase.from('variaciones').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToVariacion)
+}
+async function fetchAprendizajes(): Promise<Aprendizaje[]> {
+  const { data, error } = await supabase.from('aprendizajes').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []).map(rowToAprendizaje)
+}
+
+function useEntity<T>(table: TableKey, queryFn: () => Promise<T[]>): T[] {
+  const { data } = useQuery({ queryKey: porteKey(table), queryFn })
+  return data ?? []
+}
+
+// ─── Lectura — un hook por entidad, se dispara recién al montarse ───────────
+
+export function useIngresos(): Ingreso[] { return useEntity('ingresos', fetchIngresos) }
+export function useEgresos(): Egreso[] { return useEntity('egresos', fetchEgresos) }
+export function usePresupuestos(): Presupuesto[] { return useEntity('presupuestos', fetchPresupuestos) }
+export function useVentas(): Venta[] { return useEntity('ventas', fetchVentas) }
+export function useProveedores(): Proveedor[] { return useEntity('proveedores', fetchProveedores) }
+export function useClientes(): Cliente[] { return useEntity('clientes', fetchClientes) }
+export function useGastosFijos(): GastoFijo[] { return useEntity('gastosFijos', fetchGastosFijos) }
+export function useVariaciones(): Variacion[] { return useEntity('variaciones', fetchVariaciones) }
+export function useAprendizajes(): Aprendizaje[] { return useEntity('aprendizajes', fetchAprendizajes) }
+
+/**
+ * Re-lee entidades puntuales desde Supabase. Necesario después de mutaciones
+ * que pasan por afuera del store (ej. el asistente crea presupuestos/egresos/
+ * ingresos vía el backend con service role) — sin esto, el usuario ve el dato
+ * recién creado solo al recargar la página. Sin argumentos invalida las 9
+ * entidades; pasando `tables` invalida solo esas — usado por el asistente,
+ * que sabe qué tabla tocó su acción. Solo dispara un fetch real para las
+ * entidades con un observer activo en ese momento (staleTime 0 + invalidate);
+ * el resto queda marcada stale y se trae recién cuando el usuario la visite.
+ */
+export function usePorteRefetch() {
+  const queryClient = useQueryClient()
+  return useCallback((tables?: TableKey[]): Promise<void> => {
+    const keys = tables && tables.length > 0 ? tables : ALL_TABLE_KEYS
+    return Promise.all(keys.map(t => queryClient.invalidateQueries({ queryKey: porteKey(t) }))).then(() => undefined)
+  }, [queryClient])
+}
+
+/**
+ * Sin Provider de contexto: cada componente usa el hook de la entidad que
+ * necesita, y React Query dedupea/cachea por query key entre componentes.
+ * Este componente solo limpia el cache al desloguearse, para que una sesión
+ * siguiente (mismo u otro usuario) no arranque mostrando datos stale de la
+ * anterior.
+ */
+export function PorteDataProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
-  const [isLoading, setIsLoading] = useState(true)
-  const [ingresos, setIngresos] = useState<Ingreso[]>([])
-  const [egresos, setEgresos] = useState<Egreso[]>([])
-  const [presupuestos, setPresupuestos] = useState<Presupuesto[]>([])
-  const [ventas, setVentas] = useState<Venta[]>([])
-  const [proveedores, setProveedores] = useState<Proveedor[]>([])
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([])
-  const [variaciones, setVariaciones] = useState<Variacion[]>([])
-  const [aprendizajes, setAprendizajes] = useState<Aprendizaje[]>([])
-
-  // Guarda contra setState después de un logout mientras un refetch está en
-  // vuelo — refetch() se expone al resto de la app (ej. el asistente) y ya no
-  // corre solo dentro del useEffect de abajo, así que no puede depender del
-  // closure `cancelled` de un solo montaje.
-  const authGuardRef = useRef(isAuthenticated)
-  useEffect(() => { authGuardRef.current = isAuthenticated }, [isAuthenticated])
-
-  const loadAllImpl = useCallback(async () => {
-    const [ing, egr, pre, ven, prov, cli, gf, vcar, apr] = await Promise.all([
-      supabase.from('ingresos').select('*').order('created_at', { ascending: false }),
-      supabase.from('egresos').select('*').order('created_at', { ascending: false }),
-      supabase.from('presupuestos').select('*').order('created_at', { ascending: false }),
-      supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false }),
-      supabase.from('v_proveedores_saldo').select('*'),
-      supabase.from('clientes').select('*').order('created_at', { ascending: false }),
-      supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false }),
-      supabase.from('variaciones').select('*').order('created_at', { ascending: false }),
-      supabase.from('aprendizajes').select('*').order('created_at', { ascending: false }),
-    ])
-    if (!authGuardRef.current) return
-    if (ing.data) setIngresos(ing.data.map(rowToIngreso))
-    if (egr.data) setEgresos(egr.data.map(rowToEgreso))
-    if (pre.data) setPresupuestos(pre.data.map(rowToPresupuesto))
-    if (ven.data) setVentas(ven.data.map(rowToVenta))
-    if (prov.data) setProveedores(prov.data.map(rowToProveedor))
-    if (cli.data) setClientes(cli.data.map(rowToCliente))
-    if (gf.data) setGastosFijos(gf.data.map(rowToGastoFijo))
-    if (vcar.data) setVariaciones(vcar.data.map(rowToVariacion))
-    if (apr.data) setAprendizajes(apr.data.map(rowToAprendizaje))
-    setIsLoading(false)
-  }, [])
-
-  // `visibilitychange` y `focus` suelen dispararse casi al mismo tiempo para
-  // el mismo evento real (volver a la pestaña, recuperar el foco de la
-  // ventana) — sin esta guarda, cada uno dispararía su propio loadAllImpl()
-  // y las 9 tablas se pedirían por duplicado.
-  const loadAllInFlightRef = useRef<Promise<void> | null>(null)
-  const loadAll = useCallback(() => {
-    if (!loadAllInFlightRef.current) {
-      loadAllInFlightRef.current = loadAllImpl().finally(() => { loadAllInFlightRef.current = null })
-    }
-    return loadAllInFlightRef.current
-  }, [loadAllImpl])
-
-  // Relee solo las tablas pedidas, sin tocar isLoading — a diferencia de
-  // loadAll() (carga inicial completa), esto es para refrescar después de una
-  // mutación puntual que ya sabemos qué tabla(s) tocó.
-  const loadTables = useCallback(async (tables: TableKey[]) => {
-    await Promise.all(tables.map(async (table) => {
-      switch (table) {
-        case 'ingresos': {
-          const { data } = await supabase.from('ingresos').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setIngresos(data.map(rowToIngreso))
-          break
-        }
-        case 'egresos': {
-          const { data } = await supabase.from('egresos').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setEgresos(data.map(rowToEgreso))
-          break
-        }
-        case 'presupuestos': {
-          const { data } = await supabase.from('presupuestos').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setPresupuestos(data.map(rowToPresupuesto))
-          break
-        }
-        case 'ventas': {
-          const { data } = await supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setVentas(data.map(rowToVenta))
-          break
-        }
-        case 'proveedores': {
-          const { data } = await supabase.from('v_proveedores_saldo').select('*')
-          if (authGuardRef.current && data) setProveedores(data.map(rowToProveedor))
-          break
-        }
-        case 'clientes': {
-          const { data } = await supabase.from('clientes').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setClientes(data.map(rowToCliente))
-          break
-        }
-        case 'gastosFijos': {
-          const { data } = await supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setGastosFijos(data.map(rowToGastoFijo))
-          break
-        }
-        case 'variaciones': {
-          const { data } = await supabase.from('variaciones').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setVariaciones(data.map(rowToVariacion))
-          break
-        }
-        case 'aprendizajes': {
-          const { data } = await supabase.from('aprendizajes').select('*').order('created_at', { ascending: false })
-          if (authGuardRef.current && data) setAprendizajes(data.map(rowToAprendizaje))
-          break
-        }
-      }
-    }))
-  }, [])
-
-  const refetch: PorteDataContextType['refetch'] = useCallback(
-    (tables) => (tables && tables.length > 0 ? loadTables(tables) : loadAll()),
-    [loadTables, loadAll],
-  )
+  const queryClient = useQueryClient()
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setIngresos([]); setEgresos([]); setPresupuestos([]); setVentas([])
-      setProveedores([]); setClientes([]); setGastosFijos([]); setVariaciones([]); setAprendizajes([])
-      setIsLoading(true)
-      return
-    }
+    if (!isAuthenticated) queryClient.clear()
+  }, [isAuthenticated, queryClient])
 
-    loadAll()
+  return <>{children}</>
+}
 
-    // Re-fetch al volver a la pestaña: el store solo carga una vez al montar,
-    // así que sin esto una sesión ya abierta no ve datos cargados por otro usuario.
-    function onVisible() {
-      if (document.visibilityState === 'visible') loadAll()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onVisible)
+// ─── Mutaciones — agrupadas por entidad, leen/escriben directo el cache ─────
 
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onVisible)
-    }
-  }, [isAuthenticated, loadAll])
+export function useIngresoActions() {
+  const queryClient = useQueryClient()
 
-  const addIngreso: PorteDataContextType['addIngreso'] = (data, userId) => {
+  const addIngreso = (data: Omit<Ingreso, 'ref' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Ingreso => {
     const now = new Date().toISOString()
-    const nuevo: Ingreso = { ...data, ref: nextRef('IN', ingresos), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setIngresos(prev => [nuevo, ...prev])
+    const current = queryClient.getQueryData<Ingreso[]>(porteKey('ingresos')) ?? []
+    const nuevo: Ingreso = { ...data, ref: nextRef('IN', current), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Ingreso[]>(porteKey('ingresos'), prev => (prev ? [nuevo, ...prev] : prev))
     supabase.from('ingresos').insert({ ...ingresoToRow(nuevo), ref: nuevo.ref, created_by: userId, created_at: now, updated_at: now })
       .then(({ error }) => { if (error) logPersistError('addIngreso', error) })
     return nuevo
   }
 
-  const addEgreso: PorteDataContextType['addEgreso'] = (data, userId) => {
+  const updateIngreso = (ref: string, data: Partial<Ingreso>) => {
     const now = new Date().toISOString()
-    const nuevo: Egreso = { ...data, ref: nextRef('EG', egresos), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setEgresos(prev => [nuevo, ...prev])
+    queryClient.setQueryData<Ingreso[]>(porteKey('ingresos'), prev => prev?.map(i => (i.ref === ref ? { ...i, ...data, updatedAt: now } : i)))
+    supabase.from('ingresos').update({ ...ingresoToRow(data), updated_at: now }).eq('ref', ref)
+      .then(({ error }) => { if (error) logPersistError('updateIngreso', error) })
+  }
+
+  const removeIngreso = (ref: string) => {
+    queryClient.setQueryData<Ingreso[]>(porteKey('ingresos'), prev => prev?.filter(i => i.ref !== ref))
+    supabase.from('ingresos').delete().eq('ref', ref).then(({ error }) => { if (error) logPersistError('removeIngreso', error) })
+  }
+
+  const softDeleteIngreso = (ref: string) => updateIngreso(ref, { activo: false })
+
+  const findDuplicateIngreso = (obraId: string, monto: number, fecha: string): Ingreso | undefined => {
+    const current = queryClient.getQueryData<Ingreso[]>(porteKey('ingresos')) ?? []
+    return current.find(i => i.activo && i.id === obraId && i.monto === monto && i.fecha === fecha)
+  }
+
+  return { addIngreso, updateIngreso, removeIngreso, softDeleteIngreso, findDuplicateIngreso }
+}
+
+export function useEgresoActions() {
+  const queryClient = useQueryClient()
+
+  const addEgreso = (data: Omit<Egreso, 'ref' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Egreso => {
+    const now = new Date().toISOString()
+    const current = queryClient.getQueryData<Egreso[]>(porteKey('egresos')) ?? []
+    const nuevo: Egreso = { ...data, ref: nextRef('EG', current), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Egreso[]>(porteKey('egresos'), prev => (prev ? [nuevo, ...prev] : prev))
     supabase.from('egresos').insert({ ...egresoToRow(nuevo), ref: nuevo.ref, created_by: userId, created_at: now, updated_at: now })
       .then(({ error }) => { if (error) logPersistError('addEgreso', error) })
     return nuevo
   }
 
-  const addPresupuesto: PorteDataContextType['addPresupuesto'] = (data, userId) => {
+  const updateEgreso = (ref: string, data: Partial<Egreso>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<Egreso[]>(porteKey('egresos'), prev => prev?.map(e => (e.ref === ref ? { ...e, ...data, updatedAt: now } : e)))
+    supabase.from('egresos').update({ ...egresoToRow(data), updated_at: now }).eq('ref', ref)
+      .then(({ error }) => { if (error) logPersistError('updateEgreso', error) })
+  }
+
+  const removeEgreso = (ref: string) => {
+    queryClient.setQueryData<Egreso[]>(porteKey('egresos'), prev => prev?.filter(e => e.ref !== ref))
+    supabase.from('egresos').delete().eq('ref', ref).then(({ error }) => { if (error) logPersistError('removeEgreso', error) })
+  }
+
+  const softDeleteEgreso = (ref: string) => updateEgreso(ref, { activo: false })
+
+  const findDuplicateEgreso = (obraId: string | undefined, monto: number, fecha: string): Egreso | undefined => {
+    const current = queryClient.getQueryData<Egreso[]>(porteKey('egresos')) ?? []
+    return current.find(e => e.activo && e.id === obraId && e.monto === monto && e.fecha === fecha)
+  }
+
+  return { addEgreso, updateEgreso, removeEgreso, softDeleteEgreso, findDuplicateEgreso }
+}
+
+export function usePresupuestoActions() {
+  const queryClient = useQueryClient()
+
+  const addPresupuesto = (data: Omit<Presupuesto, 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Presupuesto => {
     const now = new Date().toISOString()
     const nuevo: Presupuesto = { ...data, activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setPresupuestos(prev => [nuevo, ...prev])
+    queryClient.setQueryData<Presupuesto[]>(porteKey('presupuestos'), prev => (prev ? [nuevo, ...prev] : prev))
     supabase.from('presupuestos').insert({ ...presupuestoToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
       .then(({ error }) => { if (error) logPersistError('addPresupuesto', error) })
     return nuevo
   }
 
-  const addVenta: PorteDataContextType['addVenta'] = (data, userId) => {
+  const updatePresupuesto = (id: string, data: Partial<Presupuesto>) => {
     const now = new Date().toISOString()
-    const nuevo: Venta = { ...data, createdAt: now, createdBy: userId, updatedAt: now }
-    setVentas(prev => [nuevo, ...prev])
-    supabase.from('ventas').insert({ ...ventaToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
-      .then(({ error }) => { if (error) logPersistError('addVenta', error) })
-    return nuevo
+    queryClient.setQueryData<Presupuesto[]>(porteKey('presupuestos'), prev => prev?.map(p => (p.id === id ? { ...p, ...data, updatedAt: now } : p)))
+    supabase.from('presupuestos').update({ ...presupuestoToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updatePresupuesto', error) })
   }
 
-  const addProveedor: PorteDataContextType['addProveedor'] = (data, userId) => {
-    const now = new Date().toISOString()
-    const nuevo: Proveedor = { ...data, idProv: nextSeqId('PROV', proveedores.map(p => p.idProv)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setProveedores(prev => [nuevo, ...prev])
-    supabase.from('proveedores').insert({ ...proveedorToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
-      .then(({ error }) => { if (error) logPersistError('addProveedor', error) })
-    return nuevo
-  }
+  const softDeletePresupuesto = (id: string) => updatePresupuesto(id, { activo: false })
 
-  const addCliente: PorteDataContextType['addCliente'] = (data, userId) => {
-    const now = new Date().toISOString()
-    const nuevo: Cliente = { ...data, idCli: nextSeqId('CLI', clientes.map(c => c.idCli)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setClientes(prev => [nuevo, ...prev])
-    supabase.from('clientes').insert({ ...clienteToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
-      .then(({ error }) => { if (error) logPersistError('addCliente', error) })
-    return nuevo
-  }
-
-  const findOrCreateCliente: PorteDataContextType['findOrCreateCliente'] = (nombre, userId) => {
-    const nombreTrim = nombre.trim()
-    const existente = clientes.find(c => c.nombre.trim().toLowerCase() === nombreTrim.toLowerCase())
-    if (existente) return existente
-    return addCliente({ nombre: nombreTrim }, userId)
-  }
-
-  const addGastoFijo: PorteDataContextType['addGastoFijo'] = (data, userId) => {
-    const now = new Date().toISOString()
-    const nuevo: GastoFijo = { ...data, id: crypto.randomUUID(), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setGastosFijos(prev => [nuevo, ...prev])
-    supabase.from('gastos_fijos').insert({ ...gastoFijoToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
-      .then(({ error }) => { if (error) logPersistError('addGastoFijo', error) })
-    return nuevo
-  }
-
-  const addVariacion: PorteDataContextType['addVariacion'] = (data, userId) => {
-    const now = new Date().toISOString()
-    const nuevo: Variacion = { ...data, idVar: nextSeqId('VAR', variaciones.map(v => v.idVar)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setVariaciones(prev => [nuevo, ...prev])
-    supabase.from('variaciones').insert({ ...variacionToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
-      .then(({ error }) => { if (error) logPersistError('addVariacion', error) })
-    return nuevo
-  }
-
-  const addAprendizaje: PorteDataContextType['addAprendizaje'] = (data, userId) => {
-    const now = new Date().toISOString()
-    const nuevo: Aprendizaje = { ...data, idApr: nextSeqId('APR', aprendizajes.map(a => a.idApr)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
-    setAprendizajes(prev => [nuevo, ...prev])
-    supabase.from('aprendizajes').insert({ ...aprendizajeToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
-      .then(({ error }) => { if (error) logPersistError('addAprendizaje', error) })
-    return nuevo
-  }
-
-  const nextPresupuestoId: PorteDataContextType['nextPresupuestoId'] = () => {
+  const nextPresupuestoId = (): string => {
     // Presupuestos y ventas comparten el mismo espacio de IDs (PR-XXXX) — considerar ambos evita colisiones.
+    const presupuestos = queryClient.getQueryData<Presupuesto[]>(porteKey('presupuestos')) ?? []
+    const ventas = queryClient.getQueryData<Venta[]>(porteKey('ventas')) ?? []
     const idsToCheck = [...presupuestos.map(p => p.id), ...ventas.map(v => v.id)]
     const max = idsToCheck.reduce((acc, id) => {
       const n = Number(id.replace('PR - ', '').replace('PR-', ''))
@@ -389,14 +265,13 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     return `PR - ${String(max + 1).padStart(4, '0')}`
   }
 
-  const updatePresupuesto: PorteDataContextType['updatePresupuesto'] = (id, data) => {
-    const now = new Date().toISOString()
-    setPresupuestos(prev => prev.map(p => p.id === id ? { ...p, ...data, updatedAt: now } : p))
-    supabase.from('presupuestos').update({ ...presupuestoToRow(data), updated_at: now }).eq('id', id)
-      .then(({ error }) => { if (error) logPersistError('updatePresupuesto', error) })
-  }
-
-  const aceptarPresupuesto: PorteDataContextType['aceptarPresupuesto'] = (id, overrides) => {
+  /**
+   * Paso 1 del flujo Presupuesto → Venta: solo cambia estadoComercial a
+   * 'Aceptado'. No crea la venta — eso pasa recién en convertirEnVenta(), una
+   * vez completas las condiciones comerciales.
+   */
+  const aceptarPresupuesto = (id: string, overrides?: Partial<Presupuesto>): { ok: true } | { ok: false; error: string } => {
+    const presupuestos = queryClient.getQueryData<Presupuesto[]>(porteKey('presupuestos')) ?? []
     const existente = presupuestos.find(p => p.id === id)
     if (!existente) return { ok: false, error: 'Presupuesto no encontrado' }
 
@@ -405,7 +280,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     if (errorValidacion) return { ok: false, error: errorValidacion }
 
     const now = new Date().toISOString()
-    setPresupuestos(prev => prev.map(p => p.id === id ? { ...p, ...overrides, estadoComercial: 'Aceptado', updatedAt: now } : p))
+    queryClient.setQueryData<Presupuesto[]>(porteKey('presupuestos'), prev => prev?.map(p => (p.id === id ? { ...p, ...overrides, estadoComercial: 'Aceptado', updatedAt: now } : p)))
 
     supabase.from('presupuestos').update({ ...presupuestoToRow(overrides ?? {}), estado_comercial: 'Aceptado', updated_at: now }).eq('id', id)
       .then(({ error }) => { if (error) logPersistError('aceptarPresupuesto', error) })
@@ -413,16 +288,34 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     return { ok: true }
   }
 
-  const convertirEnVenta: PorteDataContextType['convertirEnVenta'] = async (presupuestoId, condiciones, userId, overrides) => {
+  /**
+   * Paso 2: crea la Venta congelando los costos del presupuesto + las
+   * condiciones comerciales cargadas. Requiere que el presupuesto esté
+   * 'Aceptado' (ya sea porque ya lo estaba, o porque `overrides` lo marca así
+   * en el mismo llamado) y que todavía no tenga una venta asociada
+   * (idempotente). Valida del lado del cliente para feedback inmediato — el
+   * trigger de la base (trg_validar_condiciones_comerciales) es la barrera
+   * real. A diferencia del resto de las mutaciones, espera la confirmación
+   * real de Supabase antes de tocar el cache: es el único flujo donde una
+   * inserción puede fallar legítimamente (trigger o PK duplicada por doble
+   * submit) y un "éxito" optimista dejaría una venta fantasma.
+   *
+   * `overrides`: cambios de edición del presupuesto todavía no guardados
+   * (típicamente incluye estadoComercial: 'Aceptado') que se aplican acá antes
+   * de validar/construir la venta, y se persisten recién si la venta se creó
+   * con éxito. Permite "Aceptar + Convertir" en un solo click.
+   */
+  const convertirEnVenta = async (
+    presupuestoId: string,
+    condiciones: CondicionesComerciales,
+    userId: string,
+    overrides?: Partial<Presupuesto>,
+  ): Promise<{ ok: true; venta: Venta } | { ok: false; error: string }> => {
+    const presupuestos = queryClient.getQueryData<Presupuesto[]>(porteKey('presupuestos')) ?? []
+    const ventas = queryClient.getQueryData<Venta[]>(porteKey('ventas')) ?? []
     const presupuestoGuardado = presupuestos.find(p => p.id === presupuestoId)
     if (!presupuestoGuardado) return { ok: false, error: 'Presupuesto no encontrado' }
 
-    // `overrides` permite aceptar y convertir en un solo paso: PresupuestoFormPage
-    // pasa acá los cambios de edición todavía no guardados (incluido
-    // estadoComercial: 'Aceptado') en vez de llamar primero a aceptarPresupuesto()
-    // y recién después a esto — encadenar esas dos llamadas del store leería acá
-    // el `presupuestos` de un render viejo (el setState de la primera no se
-    // refleja hasta el próximo render) y rechazaría la conversión igual.
     const presupuesto = overrides ? { ...presupuestoGuardado, ...overrides } : presupuestoGuardado
 
     if (presupuesto.estadoComercial !== 'Aceptado') {
@@ -452,10 +345,6 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
     }
 
-    // A diferencia del resto del store, acá se espera la confirmación real de
-    // Supabase antes de tocar el estado local — este insert puede fallar
-    // legítimamente (trigger de condiciones comerciales, PK duplicada por
-    // doble submit) y un "éxito" optimista dejaría una venta fantasma.
     const { error } = await supabase
       .from('ventas')
       .insert({ ...ventaToRow(nuevaVenta), created_by: userId, created_at: now, updated_at: now })
@@ -469,120 +358,181 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     // vez que la venta ya se confirmó — si el insert de arriba hubiera fallado,
     // el presupuesto queda como estaba en vez de mostrar "Aceptado" sin venta.
     if (overrides) {
-      setPresupuestos(prev => prev.map(p => p.id === presupuestoId ? { ...p, ...overrides, updatedAt: now } : p))
+      queryClient.setQueryData<Presupuesto[]>(porteKey('presupuestos'), prev => prev?.map(p => (p.id === presupuestoId ? { ...p, ...overrides, updatedAt: now } : p)))
       supabase.from('presupuestos').update({ ...presupuestoToRow(overrides), updated_at: now }).eq('id', presupuestoId)
         .then(({ error: presupuestoError }) => { if (presupuestoError) logPersistError('convertirEnVenta:presupuesto', presupuestoError) })
     }
 
-    setVentas(prev => [nuevaVenta, ...prev])
+    queryClient.setQueryData<Venta[]>(porteKey('ventas'), prev => (prev ? [nuevaVenta, ...prev] : prev))
     return { ok: true, venta: nuevaVenta }
   }
 
-  const updateIngreso: PorteDataContextType['updateIngreso'] = (ref, data) => {
+  return { addPresupuesto, updatePresupuesto, softDeletePresupuesto, nextPresupuestoId, aceptarPresupuesto, convertirEnVenta }
+}
+
+export function useVentaActions() {
+  const queryClient = useQueryClient()
+
+  const addVenta = (data: Omit<Venta, 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Venta => {
     const now = new Date().toISOString()
-    setIngresos(prev => prev.map(i => i.ref === ref ? { ...i, ...data, updatedAt: now } : i))
-    supabase.from('ingresos').update({ ...ingresoToRow(data), updated_at: now }).eq('ref', ref)
-      .then(({ error }) => { if (error) logPersistError('updateIngreso', error) })
-  }
-  const updateEgreso: PorteDataContextType['updateEgreso'] = (ref, data) => {
-    const now = new Date().toISOString()
-    setEgresos(prev => prev.map(e => e.ref === ref ? { ...e, ...data, updatedAt: now } : e))
-    supabase.from('egresos').update({ ...egresoToRow(data), updated_at: now }).eq('ref', ref)
-      .then(({ error }) => { if (error) logPersistError('updateEgreso', error) })
+    const nuevo: Venta = { ...data, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Venta[]>(porteKey('ventas'), prev => (prev ? [nuevo, ...prev] : prev))
+    supabase.from('ventas').insert({ ...ventaToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addVenta', error) })
+    return nuevo
   }
 
-  const updateVenta: PorteDataContextType['updateVenta'] = (id, data) => {
+  const updateVenta = (id: string, data: Partial<Venta>) => {
     const now = new Date().toISOString()
-    setVentas(prev => prev.map(v => v.id === id ? { ...v, ...data, updatedAt: now } : v))
+    queryClient.setQueryData<Venta[]>(porteKey('ventas'), prev => prev?.map(v => (v.id === id ? { ...v, ...data, updatedAt: now } : v)))
     supabase.from('ventas').update({ ...ventaToRow(data), updated_at: now }).eq('id', id)
       .then(({ error }) => { if (error) logPersistError('updateVenta', error) })
   }
 
-  const updateProveedor: PorteDataContextType['updateProveedor'] = (idProv, data) => {
+  return { addVenta, updateVenta }
+}
+
+export function useProveedorActions() {
+  const queryClient = useQueryClient()
+
+  const addProveedor = (data: Omit<Proveedor, 'idProv' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Proveedor => {
     const now = new Date().toISOString()
-    setProveedores(prev => prev.map(p => p.idProv === idProv ? { ...p, ...data, updatedAt: now } : p))
+    const current = queryClient.getQueryData<Proveedor[]>(porteKey('proveedores')) ?? []
+    const nuevo: Proveedor = { ...data, idProv: nextSeqId('PROV', current.map(p => p.idProv)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Proveedor[]>(porteKey('proveedores'), prev => (prev ? [nuevo, ...prev] : prev))
+    supabase.from('proveedores').insert({ ...proveedorToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addProveedor', error) })
+    return nuevo
+  }
+
+  const updateProveedor = (idProv: string, data: Partial<Proveedor>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<Proveedor[]>(porteKey('proveedores'), prev => prev?.map(p => (p.idProv === idProv ? { ...p, ...data, updatedAt: now } : p)))
     supabase.from('proveedores').update({ ...proveedorToRow(data), updated_at: now }).eq('id_prov', idProv)
       .then(({ error }) => { if (error) logPersistError('updateProveedor', error) })
   }
-  const updateCliente: PorteDataContextType['updateCliente'] = (idCli, data) => {
+
+  const softDeleteProveedor = (idProv: string) => updateProveedor(idProv, { activo: false })
+
+  return { addProveedor, updateProveedor, softDeleteProveedor }
+}
+
+export function useClienteActions() {
+  const queryClient = useQueryClient()
+
+  const addCliente = (data: Omit<Cliente, 'idCli' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Cliente => {
+    const now = new Date().toISOString()
+    const current = queryClient.getQueryData<Cliente[]>(porteKey('clientes')) ?? []
+    const nuevo: Cliente = { ...data, idCli: nextSeqId('CLI', current.map(c => c.idCli)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Cliente[]>(porteKey('clientes'), prev => (prev ? [nuevo, ...prev] : prev))
+    supabase.from('clientes').insert({ ...clienteToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addCliente', error) })
+    return nuevo
+  }
+
+  /**
+   * Da de alta el cliente en el maestro si el nombre (case-insensitive) no
+   * existe todavía — usado al cargar un presupuesto o una venta con un
+   * nombre de cliente en texto libre, para que el maestro de Clientes se
+   * mantenga sincronizado sin pedirle un paso extra al usuario.
+   */
+  const findOrCreateCliente = (nombre: string, userId: string): Cliente => {
+    const current = queryClient.getQueryData<Cliente[]>(porteKey('clientes')) ?? []
+    const nombreTrim = nombre.trim()
+    const existente = current.find(c => c.nombre.trim().toLowerCase() === nombreTrim.toLowerCase())
+    if (existente) return existente
+    return addCliente({ nombre: nombreTrim }, userId)
+  }
+
+  const updateCliente = (idCli: string, data: ClienteUpdate) => {
     const now = new Date().toISOString()
     // `data` puede traer `null` en los campos de contacto (borrado intencional) —
-    // para el estado local, que solo conoce `string | undefined`, un borrado se
+    // para el cache, que solo conoce `string | undefined`, un borrado se
     // representa como `undefined`; el `null` real solo le importa a la fila de
     // Supabase (clienteToRow lo traduce a NULL).
     const localData: Partial<Cliente> = Object.fromEntries(
       Object.entries(data).map(([key, value]) => [key, value === null ? undefined : value]),
     )
-    setClientes(prev => prev.map(c => c.idCli === idCli ? { ...c, ...localData, updatedAt: now } : c))
+    queryClient.setQueryData<Cliente[]>(porteKey('clientes'), prev => prev?.map(c => (c.idCli === idCli ? { ...c, ...localData, updatedAt: now } : c)))
     supabase.from('clientes').update({ ...clienteToRow(data), updated_at: now }).eq('id_cli', idCli)
       .then(({ error }) => { if (error) logPersistError('updateCliente', error) })
   }
-  const updateGastoFijo: PorteDataContextType['updateGastoFijo'] = (id, data) => {
+
+  const softDeleteCliente = (idCli: string) => updateCliente(idCli, { activo: false })
+
+  return { addCliente, updateCliente, softDeleteCliente, findOrCreateCliente }
+}
+
+export function useGastoFijoActions() {
+  const queryClient = useQueryClient()
+
+  const addGastoFijo = (data: Omit<GastoFijo, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): GastoFijo => {
     const now = new Date().toISOString()
-    setGastosFijos(prev => prev.map(g => g.id === id ? { ...g, ...data, updatedAt: now } : g))
+    const nuevo: GastoFijo = { ...data, id: crypto.randomUUID(), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<GastoFijo[]>(porteKey('gastosFijos'), prev => (prev ? [nuevo, ...prev] : prev))
+    supabase.from('gastos_fijos').insert({ ...gastoFijoToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addGastoFijo', error) })
+    return nuevo
+  }
+
+  const updateGastoFijo = (id: string, data: Partial<GastoFijo>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<GastoFijo[]>(porteKey('gastosFijos'), prev => prev?.map(g => (g.id === id ? { ...g, ...data, updatedAt: now } : g)))
     supabase.from('gastos_fijos').update({ ...gastoFijoToRow(data), updated_at: now }).eq('id', id)
       .then(({ error }) => { if (error) logPersistError('updateGastoFijo', error) })
   }
-  const updateVariacion: PorteDataContextType['updateVariacion'] = (idVar, data) => {
+
+  const softDeleteGastoFijo = (id: string) => updateGastoFijo(id, { activo: false })
+
+  return { addGastoFijo, updateGastoFijo, softDeleteGastoFijo }
+}
+
+export function useVariacionActions() {
+  const queryClient = useQueryClient()
+
+  const addVariacion = (data: Omit<Variacion, 'idVar' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Variacion => {
     const now = new Date().toISOString()
-    setVariaciones(prev => prev.map(v => v.idVar === idVar ? { ...v, ...data, updatedAt: now } : v))
+    const current = queryClient.getQueryData<Variacion[]>(porteKey('variaciones')) ?? []
+    const nuevo: Variacion = { ...data, idVar: nextSeqId('VAR', current.map(v => v.idVar)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Variacion[]>(porteKey('variaciones'), prev => (prev ? [nuevo, ...prev] : prev))
+    supabase.from('variaciones').insert({ ...variacionToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addVariacion', error) })
+    return nuevo
+  }
+
+  const updateVariacion = (idVar: string, data: Partial<Variacion>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<Variacion[]>(porteKey('variaciones'), prev => prev?.map(v => (v.idVar === idVar ? { ...v, ...data, updatedAt: now } : v)))
     supabase.from('variaciones').update({ ...variacionToRow(data), updated_at: now }).eq('id_var', idVar)
       .then(({ error }) => { if (error) logPersistError('updateVariacion', error) })
   }
-  const updateAprendizaje: PorteDataContextType['updateAprendizaje'] = (idApr, data) => {
+
+  const softDeleteVariacion = (idVar: string) => updateVariacion(idVar, { activo: false })
+
+  return { addVariacion, updateVariacion, softDeleteVariacion }
+}
+
+export function useAprendizajeActions() {
+  const queryClient = useQueryClient()
+
+  const addAprendizaje = (data: Omit<Aprendizaje, 'idApr' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Aprendizaje => {
     const now = new Date().toISOString()
-    setAprendizajes(prev => prev.map(a => a.idApr === idApr ? { ...a, ...data, updatedAt: now } : a))
+    const current = queryClient.getQueryData<Aprendizaje[]>(porteKey('aprendizajes')) ?? []
+    const nuevo: Aprendizaje = { ...data, idApr: nextSeqId('APR', current.map(a => a.idApr)), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Aprendizaje[]>(porteKey('aprendizajes'), prev => (prev ? [nuevo, ...prev] : prev))
+    supabase.from('aprendizajes').insert({ ...aprendizajeToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addAprendizaje', error) })
+    return nuevo
+  }
+
+  const updateAprendizaje = (idApr: string, data: Partial<Aprendizaje>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<Aprendizaje[]>(porteKey('aprendizajes'), prev => prev?.map(a => (a.idApr === idApr ? { ...a, ...data, updatedAt: now } : a)))
     supabase.from('aprendizajes').update({ ...aprendizajeToRow(data), updated_at: now }).eq('id_apr', idApr)
       .then(({ error }) => { if (error) logPersistError('updateAprendizaje', error) })
   }
 
-  const removeIngreso = (ref: string) => {
-    setIngresos(prev => prev.filter(i => i.ref !== ref))
-    supabase.from('ingresos').delete().eq('ref', ref).then(({ error }) => { if (error) logPersistError('removeIngreso', error) })
-  }
-  const removeEgreso = (ref: string) => {
-    setEgresos(prev => prev.filter(e => e.ref !== ref))
-    supabase.from('egresos').delete().eq('ref', ref).then(({ error }) => { if (error) logPersistError('removeEgreso', error) })
-  }
-
-  const softDeleteIngreso = (ref: string) => updateIngreso(ref, { activo: false })
-  const softDeleteEgreso = (ref: string) => updateEgreso(ref, { activo: false })
-  const softDeletePresupuesto = (id: string) => updatePresupuesto(id, { activo: false })
-  const softDeleteProveedor = (idProv: string) => updateProveedor(idProv, { activo: false })
-  const softDeleteCliente = (idCli: string) => updateCliente(idCli, { activo: false })
-  const softDeleteGastoFijo = (id: string) => updateGastoFijo(id, { activo: false })
-  const softDeleteVariacion = (idVar: string) => updateVariacion(idVar, { activo: false })
   const softDeleteAprendizaje = (idApr: string) => updateAprendizaje(idApr, { activo: false })
 
-  const findDuplicateIngreso: PorteDataContextType['findDuplicateIngreso'] = (obraId, monto, fecha) =>
-    ingresos.find(i => i.activo && i.id === obraId && i.monto === monto && i.fecha === fecha)
-
-  const findDuplicateEgreso: PorteDataContextType['findDuplicateEgreso'] = (obraId, monto, fecha) =>
-    egresos.find(e => e.activo && e.id === obraId && e.monto === monto && e.fecha === fecha)
-
-  return (
-    <PorteDataContext.Provider
-      value={{
-        isLoading,
-        ingresos, egresos, presupuestos, ventas, proveedores, clientes, gastosFijos, variaciones, aprendizajes,
-        addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addCliente, findOrCreateCliente, addGastoFijo, addVariacion, addAprendizaje,
-        updateIngreso, updateEgreso, updatePresupuesto, updateVenta, updateProveedor, updateCliente, updateGastoFijo, updateVariacion, updateAprendizaje,
-        refetch,
-        nextPresupuestoId,
-        aceptarPresupuesto,
-        convertirEnVenta,
-        removeIngreso, removeEgreso,
-        softDeleteIngreso, softDeleteEgreso, softDeletePresupuesto, softDeleteProveedor, softDeleteCliente, softDeleteGastoFijo, softDeleteVariacion, softDeleteAprendizaje,
-        findDuplicateIngreso, findDuplicateEgreso,
-      }}
-    >
-      {children}
-    </PorteDataContext.Provider>
-  )
-}
-
-export function usePorteData() {
-  const ctx = useContext(PorteDataContext)
-  if (!ctx) throw new Error('usePorteData must be used within PorteDataProvider')
-  return ctx
+  return { addAprendizaje, updateAprendizaje, softDeleteAprendizaje }
 }

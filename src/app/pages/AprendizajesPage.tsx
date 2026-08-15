@@ -8,14 +8,15 @@ import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { AprendizajeDialog } from '@/components/AprendizajeDialog'
 import { CONFIG_LISTS, type Aprendizaje } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useAprendizajes, useAprendizajeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatDate } from '@/lib/format'
 
 export default function AprendizajesPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { aprendizajes, softDeleteAprendizaje } = usePorteData()
+  const aprendizajes = useAprendizajes()
+  const { softDeleteAprendizaje } = useAprendizajeActions()
   const [categoriaFilter, setCategoriaFilter] = useState('all')
   const [editing, setEditing] = useState<Aprendizaje | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Aprendizaje | null>(null)

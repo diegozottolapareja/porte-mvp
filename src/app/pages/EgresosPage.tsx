@@ -5,10 +5,11 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
+import { CardActionsMenu } from '@/components/CardActionsMenu'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { usePorteData } from '@/modules/porte/store'
+import { useEgresos, useVentas, useEgresoActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import type { EstadoEgreso, Egreso } from '@/modules/porte'
@@ -24,7 +25,9 @@ const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 export default function EgresosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { egresos, ventas, updateEgreso, softDeleteEgreso } = usePorteData()
+  const egresos = useEgresos()
+  const ventas = useVentas()
+  const { updateEgreso, softDeleteEgreso } = useEgresoActions()
   const [pendingDelete, setPendingDelete] = useState<Egreso | null>(null)
   const activos = egresos.filter(e => e.activo)
   const puedeEditar = can('egresos:write')
@@ -88,13 +91,11 @@ export default function EgresosPage() {
               ]}
               actions={
                 (puedeEditar || puedeEliminar) && (
-                  <div className="flex items-center gap-4">
-                    {puedeEditar && (
-                      <button onClick={() => navigate(`/egresos/nuevo?ref=${egreso.ref}`)} className="text-sm font-medium text-primary">Editar</button>
-                    )}
-                    {puedeEliminar && (
-                      <button onClick={() => setPendingDelete(egreso)} className="text-sm font-medium text-destructive">Eliminar</button>
-                    )}
+                  <div className="flex w-full justify-end">
+                    <CardActionsMenu
+                      onEdit={puedeEditar ? () => navigate(`/egresos/nuevo?ref=${egreso.ref}`) : undefined}
+                      onDelete={puedeEliminar ? () => setPendingDelete(egreso) : undefined}
+                    />
                   </div>
                 )
               }

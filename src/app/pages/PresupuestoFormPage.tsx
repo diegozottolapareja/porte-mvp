@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { CondicionesComercialesFields, CONDICIONES_COMERCIALES_DRAFT_VACIO, type CondicionesComercialesDraft } from '@/components/CondicionesComercialesFields'
 import { CONFIG_LISTS, validarCondicionesComerciales, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial, type CondicionPago, type TipoCaja } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { usePresupuestos, useVentas, useClientes, usePresupuestoActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, localDateString, todayLocal } from '@/lib/format'
 import { isNegativeAmount } from '@/lib/validation'
@@ -13,7 +13,10 @@ export default function PresupuestoFormPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { id } = useParams()
-  const { presupuestos, ventas, clientes, addPresupuesto, updatePresupuesto, convertirEnVenta, nextPresupuestoId } = usePorteData()
+  const presupuestos = usePresupuestos()
+  const ventas = useVentas()
+  const clientes = useClientes()
+  const { addPresupuesto, updatePresupuesto, convertirEnVenta, nextPresupuestoId } = usePresupuestoActions()
   const existing = id ? presupuestos.find(p => p.id === decodeURIComponent(id)) : undefined
   const clientesActivos = clientes.filter(c => c.activo)
 

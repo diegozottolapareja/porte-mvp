@@ -5,12 +5,14 @@ import { MetricCard } from '@/components/MetricCard'
 import { EntityCard } from '@/components/EntityCard'
 import { EntityList } from '@/components/EntityList'
 import { ESTADO_OPERATIVO_CONFIG, getTotalCobrado, getSaldoPendiente } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useIngresos, useEgresos } from '@/modules/porte/store'
 import { formatCurrency } from '@/lib/format'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { ventas, ingresos, egresos } = usePorteData()
+  const ventas = useVentas()
+  const ingresos = useIngresos()
+  const egresos = useEgresos()
 
   const ventasActivas = ventas.filter(v => v.estadoOp !== 'Cerrado')
   const totalACobrar = ventasActivas.reduce((sum, v) => sum + getSaldoPendiente(v, ingresos), 0)

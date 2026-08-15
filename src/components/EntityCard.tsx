@@ -6,11 +6,18 @@ export interface EntityCardField {
   label: string
   value: string | number | undefined
   highlight?: boolean
+  /** Overrides the default text color. Falls back to `highlight` when unset. */
+  tone?: 'positive' | 'negative'
   /** Explicit grid slot. Omit to keep the default row-major auto-flow. */
   align?: 'left' | 'right'
   row?: number
   rowSpan?: number
   size?: 'default' | 'lg'
+}
+
+const TONE_CLASS: Record<NonNullable<EntityCardField['tone']>, string> = {
+  positive: 'text-green-600',
+  negative: 'text-red-600',
 }
 
 interface EntityCardProps {
@@ -56,14 +63,14 @@ export function EntityCard({ title, subtitle, fields, badge, status, statusNode,
 
         {fields && fields.length > 0 && (
           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5">
-            {fields.map(({ label, value, highlight, align, row, rowSpan, size }) => (
+            {fields.map(({ label, value, highlight, tone, align, row, rowSpan, size }) => (
               <div
                 key={label}
                 style={row ? { gridColumn: align === 'right' ? 2 : 1, gridRow: rowSpan ? `${row} / span ${rowSpan}` : row } : undefined}
                 className={[align === 'right' ? 'text-right' : '', rowSpan ? 'flex flex-col justify-center' : ''].filter(Boolean).join(' ')}
               >
                 <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
-                <p className={`${size === 'lg' ? 'text-lg' : 'text-sm'} font-medium ${highlight ? 'text-primary' : 'text-gray-800'}`}>
+                <p className={`${size === 'lg' ? 'text-lg' : 'text-sm'} font-medium ${tone ? TONE_CLASS[tone] : highlight ? 'text-primary' : 'text-gray-800'}`}>
                   {value ?? '—'}
                 </p>
               </div>

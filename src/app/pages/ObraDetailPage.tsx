@@ -16,7 +16,7 @@ import {
   getTotalCobrado, getSaldoPendiente, getEstadoCobro, getCosteRealPorCategoria, getCosteRealTotal,
   type EstadoOperativo, type Variacion, type Aprendizaje,
 } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useIngresos, useEgresos, useVariaciones, useAprendizajes, useVentaActions, useVariacionActions, useAprendizajeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { ClipboardList } from 'lucide-react'
@@ -34,7 +34,14 @@ export default function ObraDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
   const { can } = useAuth()
-  const { ventas, ingresos, egresos, variaciones, aprendizajes, updateVenta, softDeleteVariacion, softDeleteAprendizaje } = usePorteData()
+  const ventas = useVentas()
+  const ingresos = useIngresos()
+  const egresos = useEgresos()
+  const variaciones = useVariaciones()
+  const aprendizajes = useAprendizajes()
+  const { updateVenta } = useVentaActions()
+  const { softDeleteVariacion } = useVariacionActions()
+  const { softDeleteAprendizaje } = useAprendizajeActions()
   const venta = ventas.find(v => v.id === decodeURIComponent(id ?? ''))
   const [searchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')

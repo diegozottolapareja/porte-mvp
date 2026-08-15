@@ -7,14 +7,16 @@ import { EmptyState } from '@/components/EmptyState'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ClienteDialog } from '@/components/ClienteDialog'
-import { usePorteData } from '@/modules/porte/store'
+import { useClientes, useVentas, useClienteActions } from '@/modules/porte/store'
 import { formatCurrency } from '@/lib/format'
 import type { Cliente } from '@/modules/porte'
 
 export default function ClienteDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { clientes, ventas, softDeleteCliente } = usePorteData()
+  const clientes = useClientes()
+  const ventas = useVentas()
+  const { softDeleteCliente } = useClienteActions()
   const cliente = clientes.find(c => c.idCli === decodeURIComponent(id ?? ''))
   // Sin FK entre ventas.cliente y clientes: es texto libre, así que el match acá
   // es por nombre (case-insensitive) — puede no capturar variaciones de tipeo.

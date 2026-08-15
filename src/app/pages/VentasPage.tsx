@@ -6,7 +6,7 @@ import { EntityCard } from '@/components/EntityCard'
 import { EstadoOperativoSelect } from '@/components/EstadoOperativoSelect'
 import { Pager } from '@/components/Pager'
 import { ESTADO_OPERATIVO_CONFIG, ESTADO_COBRO_CONFIG, CONFIG_LISTS, getTotalCobrado, getEstadoCobro, type EstadoOperativo } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useIngresos, useVentaActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, extractIdSeq } from '@/lib/format'
 
@@ -20,7 +20,9 @@ const PAGE_SIZE = 20
 export default function VentasPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { ventas, ingresos, updateVenta } = usePorteData()
+  const ventas = useVentas()
+  const ingresos = useIngresos()
+  const { updateVenta } = useVentaActions()
   const [estadoFilter, setEstadoFilter] = useState<string>('all')
   const [page, setPage] = useState(1)
 

@@ -14,7 +14,7 @@ import { NAV_ICONS } from './iconMap'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { getNavGroups } from '@/config/navigationConfig'
 import { appConfig } from '@/config/appConfig'
-import { usePorteData } from '@/modules/porte/store'
+import { usePresupuestos, useVentas, useProveedores } from '@/modules/porte/store'
 
 interface AppShellProps {
   title: string
@@ -38,7 +38,9 @@ export function AppShell({ title, actions, detailPanel, onBack, narrow, children
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const { presupuestos, ventas, proveedores } = usePorteData()
+  const presupuestos = usePresupuestos()
+  const ventas = useVentas()
+  const proveedores = useProveedores()
   const [query, setQuery] = useState('')
 
   if (!user) return <>{children}</>

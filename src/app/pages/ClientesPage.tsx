@@ -9,13 +9,14 @@ import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ClienteDialog } from '@/components/ClienteDialog'
 import type { Cliente } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useClientes, useClienteActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function ClientesPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { clientes, softDeleteCliente } = usePorteData()
+  const clientes = useClientes()
+  const { softDeleteCliente } = useClienteActions()
   const [editing, setEditing] = useState<Cliente | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Cliente | null>(null)
 

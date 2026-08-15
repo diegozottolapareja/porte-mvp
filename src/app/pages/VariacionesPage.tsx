@@ -8,14 +8,16 @@ import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { VariacionDialog } from '@/components/VariacionDialog'
 import { type Variacion } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useVariaciones, useVariacionActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 
 export default function VariacionesPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { ventas, variaciones, softDeleteVariacion } = usePorteData()
+  const ventas = useVentas()
+  const variaciones = useVariaciones()
+  const { softDeleteVariacion } = useVariacionActions()
   const [obraFilter, setObraFilter] = useState('all')
   const [editing, setEditing] = useState<Variacion | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Variacion | null>(null)

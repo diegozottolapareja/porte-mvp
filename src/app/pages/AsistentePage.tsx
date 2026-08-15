@@ -8,7 +8,7 @@ import { VoiceRecorder } from '@/components/assistant/VoiceRecorder'
 import { FileAttachButton } from '@/components/assistant/FileAttachButton'
 import { AttachmentPreview } from '@/components/assistant/AttachmentPreview'
 import { sendAssistantMessage, transcribeAudio, uploadAssistantFiles } from '@/lib/assistantApi'
-import { usePorteData, type TableKey } from '@/modules/porte/store'
+import { usePorteRefetch, type TableKey } from '@/modules/porte/store'
 
 const WELCOME_MESSAGE: ChatMessageData = {
   id: 'welcome',
@@ -41,7 +41,7 @@ const UPLOAD_DOCUMENT_TABLES: Record<string, TableKey[]> = {
 
 export default function AsistentePage() {
   const navigate = useNavigate()
-  const { refetch } = usePorteData()
+  const refetch = usePorteRefetch()
   const [messages, setMessages] = useState<ChatMessageData[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])

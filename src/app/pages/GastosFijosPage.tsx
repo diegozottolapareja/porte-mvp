@@ -4,13 +4,15 @@ import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
+import { EntityCard } from '@/components/EntityCard'
+import { CardActionsMenu } from '@/components/CardActionsMenu'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/app/components/ui/dialog'
 import { Button } from '@/app/components/ui/button'
 import { PillSelect } from '@/components/PillSelect'
 import { calcDiferencia, CONFIG_LISTS, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useGastosFijos, useGastoFijoActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { isNegativeAmount } from '@/lib/validation'
@@ -27,10 +29,12 @@ const ESTADOS: EstadoGastoFijo[] = ['PREVISTO', 'PAGADO', 'VENCIDO']
 export default function GastosFijosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { gastosFijos, updateGastoFijo, softDeleteGastoFijo } = usePorteData()
+  const gastosFijos = useGastosFijos()
+  const { updateGastoFijo, softDeleteGastoFijo } = useGastoFijoActions()
   const [editing, setEditing] = useState<GastoFijo | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<GastoFijo | null>(null)
   const puedeEditar = can('gastosfijos:write')
+  const puedeEliminar = can('gastosfijos:delete')
 
   const activos = gastosFijos.filter(g => g.activo)
 
@@ -54,13 +58,11 @@ export default function GastosFijosPage() {
         renderItem={g => {
           const diferencia = calcDiferencia(g)
           return (
-            <div className="bg-white rounded-2xl border border-border p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="font-medium text-sm">{g.concepto}</p>
-                  <p className="text-xs text-muted-foreground">{g.categoria} · {g.periodicidad} · {formatDate(g.fecha)}</p>
-                </div>
-                {puedeEditar ? (
+            <EntityCard
+              title={g.concepto}
+              subtitle={`${g.categoria} · ${g.periodicidad} · ${formatDate(g.fecha)}`}
+              statusNode={
+                puedeEditar ? (
                   <PillSelect
                     value={g.estado}
                     options={ESTADOS}
@@ -69,27 +71,24 @@ export default function GastosFijosPage() {
                   />
                 ) : (
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-sm mb-3">
-                <div><p className="text-[11px] text-muted-foreground uppercase">Previsto</p><p className="font-medium">{formatCurrency(g.montoPrevisto)}</p></div>
-                <div><p className="text-[11px] text-muted-foreground uppercase">Real</p><p className="font-medium">{g.montoReal === null ? '—' : formatCurrency(g.montoReal)}</p></div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground uppercase">Diferencia</p>
-                  <p className={`font-medium ${diferencia === null ? '' : diferencia > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    {diferencia === null ? '—' : formatCurrency(diferencia)}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 border-t border-border pt-2">
-                <PermissionGuard permission="gastosfijos:write">
-                  <button onClick={() => setEditing(g)} className="text-sm font-medium text-primary">Editar</button>
-                </PermissionGuard>
-                <PermissionGuard permission="gastosfijos:delete">
-                  <button onClick={() => setPendingDelete(g)} className="text-sm font-medium text-destructive">Eliminar</button>
-                </PermissionGuard>
-              </div>
-            </div>
+                )
+              }
+              fields={[
+                { label: 'Previsto', value: formatCurrency(g.montoPrevisto), row: 1 },
+                { label: 'Real', value: g.montoReal === null ? '—' : formatCurrency(g.montoReal), align: 'right', row: 1 },
+                { label: 'Diferencia', value: diferencia === null ? '—' : formatCurrency(diferencia), row: 2, tone: diferencia === null ? undefined : diferencia > 0 ? 'negative' : 'positive' },
+              ]}
+              actions={
+                (puedeEditar || puedeEliminar) && (
+                  <div className="flex w-full justify-end">
+                    <CardActionsMenu
+                      onEdit={puedeEditar ? () => setEditing(g) : undefined}
+                      onDelete={puedeEliminar ? () => setPendingDelete(g) : undefined}
+                    />
+                  </div>
+                )
+              }
+            />
           )
         }}
       />
@@ -119,7 +118,7 @@ export default function GastosFijosPage() {
 
 function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null; onClose: () => void }) {
   const { user } = useAuth()
-  const { addGastoFijo, updateGastoFijo } = usePorteData()
+  const { addGastoFijo, updateGastoFijo } = useGastoFijoActions()
   const existing = value && value !== 'nuevo' ? value : undefined
 
   const [fecha, setFecha] = useState(existing?.fecha ?? todayLocal())

@@ -3,13 +3,13 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/app/components/ui/dialog'
 import { Button } from '@/app/components/ui/button'
 import { CONFIG_LISTS, type Proveedor, type Cuenta, type TipoCaja } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useProveedorActions } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { todayLocal } from '@/lib/format'
 
 export function ProveedorDialog({ value, onClose }: { value: Proveedor | 'nuevo' | null; onClose: () => void }) {
   const { user } = useAuth()
-  const { addProveedor, updateProveedor } = usePorteData()
+  const { addProveedor, updateProveedor } = useProveedorActions()
   const existing = value && value !== 'nuevo' ? value : undefined
 
   const [nombre, setNombre] = useState(existing?.nombre ?? '')

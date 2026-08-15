@@ -7,14 +7,16 @@ import { EmptyState } from '@/components/EmptyState'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ProveedorDialog } from '@/components/ProveedorDialog'
-import { usePorteData } from '@/modules/porte/store'
+import { useProveedores, useEgresos, useProveedorActions } from '@/modules/porte/store'
 import { formatCurrency, formatDate } from '@/lib/format'
 import type { Proveedor } from '@/modules/porte'
 
 export default function ProveedorDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
-  const { proveedores, egresos, softDeleteProveedor } = usePorteData()
+  const proveedores = useProveedores()
+  const egresos = useEgresos()
+  const { softDeleteProveedor } = useProveedorActions()
   const proveedor = proveedores.find(p => p.idProv === decodeURIComponent(id ?? ''))
   const egresosProveedor = egresos.filter(e => e.proveedor === proveedor?.idProv)
   const [pendingDelete, setPendingDelete] = useState(false)

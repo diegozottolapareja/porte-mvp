@@ -5,10 +5,11 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
+import { CardActionsMenu } from '@/components/CardActionsMenu'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { usePorteData } from '@/modules/porte/store'
+import { useIngresos, useVentas, useIngresoActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import type { EstadoIngreso, Ingreso } from '@/modules/porte'
@@ -22,7 +23,9 @@ const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 export default function IngresosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
-  const { ingresos, ventas, updateIngreso, softDeleteIngreso } = usePorteData()
+  const ingresos = useIngresos()
+  const ventas = useVentas()
+  const { updateIngreso, softDeleteIngreso } = useIngresoActions()
   const [pendingDelete, setPendingDelete] = useState<Ingreso | null>(null)
   const activos = ingresos.filter(i => i.activo)
   const puedeEditar = can('ingresos:write')
@@ -81,13 +84,11 @@ export default function IngresosPage() {
               ]}
               actions={
                 (puedeEditar || puedeEliminar) && (
-                  <div className="flex items-center gap-4">
-                    {puedeEditar && (
-                      <button onClick={() => navigate(`/ingresos/nuevo?ref=${ingreso.ref}`)} className="text-sm font-medium text-primary">Editar</button>
-                    )}
-                    {puedeEliminar && (
-                      <button onClick={() => setPendingDelete(ingreso)} className="text-sm font-medium text-destructive">Eliminar</button>
-                    )}
+                  <div className="flex w-full justify-end">
+                    <CardActionsMenu
+                      onEdit={puedeEditar ? () => navigate(`/ingresos/nuevo?ref=${ingreso.ref}`) : undefined}
+                      onDelete={puedeEliminar ? () => setPendingDelete(ingreso) : undefined}
+                    />
                   </div>
                 )
               }

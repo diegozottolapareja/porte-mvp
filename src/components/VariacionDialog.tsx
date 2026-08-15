@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/app/components/ui/button'
 import { SearchableSelect } from './SearchableSelect'
 import { CONFIG_LISTS, type Variacion, type TipoVariacion } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useVariacionActions } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { todayLocal } from '@/lib/format'
 
@@ -18,7 +18,8 @@ interface VariacionDialogProps {
 
 export function VariacionDialog({ open, onClose, editing, fixedObra }: VariacionDialogProps) {
   const { user } = useAuth()
-  const { ventas, addVariacion, updateVariacion } = usePorteData()
+  const ventas = useVentas()
+  const { addVariacion, updateVariacion } = useVariacionActions()
 
   const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
 

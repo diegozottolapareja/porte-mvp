@@ -6,7 +6,10 @@ import { AppShell } from '@/components/AppShell'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs'
-import { usePorteData } from '@/modules/porte/store'
+import {
+  useIngresos, useEgresos, usePresupuestos, useProveedores, useGastosFijos, useVariaciones, useAprendizajes,
+  useIngresoActions, useEgresoActions, usePresupuestoActions, useProveedorActions, useGastoFijoActions, useVariacionActions, useAprendizajeActions,
+} from '@/modules/porte/store'
 import { formatCurrency, formatDate, localDateString } from '@/lib/format'
 
 type Tab = 'todos' | 'ingresos' | 'egresos' | 'presupuestos' | 'proveedores' | 'gastosfijos' | 'variaciones' | 'aprendizajes'
@@ -48,11 +51,20 @@ function daysAgo(n: number): string {
 
 export default function MisRegistrosPage() {
   const navigate = useNavigate()
-  const {
-    ingresos, egresos, presupuestos, proveedores, gastosFijos, variaciones, aprendizajes,
-    softDeleteIngreso, softDeleteEgreso, softDeletePresupuesto,
-    softDeleteProveedor, softDeleteGastoFijo, softDeleteVariacion, softDeleteAprendizaje,
-  } = usePorteData()
+  const ingresos = useIngresos()
+  const egresos = useEgresos()
+  const presupuestos = usePresupuestos()
+  const proveedores = useProveedores()
+  const gastosFijos = useGastosFijos()
+  const variaciones = useVariaciones()
+  const aprendizajes = useAprendizajes()
+  const { softDeleteIngreso } = useIngresoActions()
+  const { softDeleteEgreso } = useEgresoActions()
+  const { softDeletePresupuesto } = usePresupuestoActions()
+  const { softDeleteProveedor } = useProveedorActions()
+  const { softDeleteGastoFijo } = useGastoFijoActions()
+  const { softDeleteVariacion } = useVariacionActions()
+  const { softDeleteAprendizaje } = useAprendizajeActions()
 
   const [tab, setTab] = useState<Tab>('todos')
   const [query, setQuery] = useState('')

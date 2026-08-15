@@ -6,7 +6,7 @@ import { motion } from 'motion/react'
 import { AppShell } from '@/components/AppShell'
 import { MetricCard } from '@/components/MetricCard'
 import { EmptyState } from '@/components/EmptyState'
-import { usePorteData } from '@/modules/porte/store'
+import { useIngresos, useEgresos, usePresupuestos } from '@/modules/porte/store'
 import { formatCurrency, localDateString, todayLocal } from '@/lib/format'
 
 interface FeedItem {
@@ -37,7 +37,9 @@ const ACTIONS: ActionDef[] = [
 
 export default function CargaRapidaPage() {
   const navigate = useNavigate()
-  const { ingresos, egresos, presupuestos } = usePorteData()
+  const ingresos = useIngresos()
+  const egresos = useEgresos()
+  const presupuestos = usePresupuestos()
   const hoy = todayLocal()
 
   // Mismos datos que ve admin — sin filtrar por usuario, así "carga" tiene el panorama completo.

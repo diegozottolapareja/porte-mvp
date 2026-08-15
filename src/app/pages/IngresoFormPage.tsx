@@ -5,7 +5,7 @@ import { AppShell } from '@/components/AppShell'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { CONFIG_LISTS, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useIngresos, useIngresoActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
@@ -13,7 +13,9 @@ import { toPositiveAmount } from '@/lib/validation'
 export default function IngresoFormPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { ventas, ingresos, addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso } = usePorteData()
+  const ventas = useVentas()
+  const ingresos = useIngresos()
+  const { addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso } = useIngresoActions()
   const [searchParams] = useSearchParams()
   const editRef = searchParams.get('ref')
   const obraIdParam = searchParams.get('obraId')

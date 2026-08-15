@@ -5,7 +5,7 @@ import { AppShell } from '@/components/AppShell'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { CONFIG_LISTS, type TipoEgreso, type Cuenta, type TipoCaja, type Egreso } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useVentas, useProveedores, useEgresos, useEgresoActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
@@ -13,7 +13,10 @@ import { toPositiveAmount } from '@/lib/validation'
 export default function EgresoFormPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { ventas, proveedores, egresos, addEgreso, updateEgreso, removeEgreso, findDuplicateEgreso } = usePorteData()
+  const ventas = useVentas()
+  const proveedores = useProveedores()
+  const egresos = useEgresos()
+  const { addEgreso, updateEgreso, removeEgreso, findDuplicateEgreso } = useEgresoActions()
   const [searchParams] = useSearchParams()
   const editRef = searchParams.get('ref')
   const obraIdParam = searchParams.get('obraId')

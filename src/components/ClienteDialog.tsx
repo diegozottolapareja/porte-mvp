@@ -3,12 +3,12 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/app/components/ui/dialog'
 import { Button } from '@/app/components/ui/button'
 import type { Cliente } from '@/modules/porte'
-import { usePorteData } from '@/modules/porte/store'
+import { useClienteActions } from '@/modules/porte/store'
 import { useAuth } from '@/app/contexts/AuthContext'
 
 export function ClienteDialog({ value, onClose }: { value: Cliente | 'nuevo' | null; onClose: () => void }) {
   const { user } = useAuth()
-  const { addCliente, updateCliente } = usePorteData()
+  const { addCliente, updateCliente } = useClienteActions()
   const existing = value && value !== 'nuevo' ? value : undefined
 
   const [nombre, setNombre] = useState(existing?.nombre ?? '')
