@@ -17,6 +17,7 @@ const ESTADO_STYLE: Record<EstadoEgreso, { label: string; color: string; bgColor
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
   Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
   Emitido: { label: 'Cheque emitido', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
+  Incompleto: { label: 'Incompleto', color: 'text-orange-700', bgColor: 'bg-orange-100' },
 }
 const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 

@@ -1,6 +1,6 @@
 import { createAdminClient, authenticateRequest } from '../_lib/supabaseAdmin.js';
 import { processDocument } from '../_lib/documentProcessingService.js';
-import { validateExpense, validateIncome, validateBudget, type PresupuestoPayload } from '../_lib/documentValidation.js';
+import { validateExpense, validateIncome, validateBudget, type PresupuestoPayload, type EgresoPayload } from '../_lib/documentValidation.js';
 import { executeAction } from '../_lib/actionExecutor.js';
 import type { DocumentExtractionEnvelope, ExtractedDocumentData } from '../_lib/documentSchemas.js';
 
@@ -13,14 +13,16 @@ export const config = { runtime: 'edge' };
 // la autenticación en producción con "request.headers.get is not a
 // function", enmascarado antes por el bug de resolución de módulos ESM.
 //
-// Egresos/ingresos: clasifica, extrae, valida y deja el resultado en
+// Ingresos: clasifica, extrae, valida y deja el resultado en
 // `conversations.pending_extraction` — la confirmación por texto o voz
 // (api/assistant/message.ts) es la que dispara el Action Executor.
 //
-// Presupuestos (budget/budget_group): se crean directo acá, en el mismo
-// request — el upload en sí es la acción, sin pasar por "¿lo cargo?" en el
-// chat (el cliente, si no existe, se crea con contacto placeholder). No hay
-// otra forma de confirmarlo aparte de subir el archivo.
+// Presupuestos (budget/budget_group) y facturas de compra (expense): se
+// crean directo acá, en el mismo request — el upload en sí es la acción, sin
+// pasar por "¿lo cargo?" en el chat (el cliente/proveedor, si no existe, se
+// crea al vuelo). No hay otra forma de confirmarlo aparte de subir el
+// archivo. Las facturas quedan siempre "Incompleto": todavía no hay forma de
+// asociar un egreso cargado por factura a una venta/obra.
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
@@ -50,19 +52,6 @@ interface FileSummary {
   error?: string;
 }
 
-function summarizeExpense(fileName: string, data: ExtractedDocumentData): { text: string; ready: boolean } {
-  const validation = validateExpense(data);
-  if (!validation.ok) {
-    return { text: `"${fileName}": parece un egreso, pero faltan datos: ${validation.missingFields.join(', ')}. ¿Me los pasás?`, ready: false };
-  }
-  const p = validation.payload!;
-  const warn = validation.warnings.length > 0 ? ` (ojo: ${validation.warnings.join('; ')})` : '';
-  return {
-    text: `"${fileName}": encontré un egreso de $${p.monto.toLocaleString('es-AR')} a ${p.proveedor} (${p.categoria})${warn}. Me falta la cuenta y la caja para cargarlo — ¿cuáles uso? Decime y confirmo.`,
-    ready: true,
-  };
-}
-
 function summarizeIncome(fileName: string, data: ExtractedDocumentData): { text: string; ready: boolean } {
   const validation = validateIncome(data);
   if (!validation.ok) {
@@ -76,8 +65,9 @@ function summarizeIncome(fileName: string, data: ExtractedDocumentData): { text:
   };
 }
 
-// Los presupuestos extraídos de un documento se crean directo en este mismo
-// request (sin pasar por "¿lo cargo?" en el chat) — ver handler más abajo.
+// Los presupuestos y las facturas extraídos de un documento se crean directo
+// en este mismo request (sin pasar por "¿lo cargo?" en el chat) — ver
+// handler más abajo.
 
 interface BudgetItem {
   assistantDocId: string;
@@ -85,13 +75,19 @@ interface BudgetItem {
   summaryRef: FileSummary;
 }
 
-type ClienteStatus = 'existing' | 'created' | 'create_failed';
+interface InvoiceItem {
+  assistantDocId: string;
+  payload: EgresoPayload;
+  summaryRef: FileSummary;
+}
 
-function normalizeCliente(nombre: string): string {
+type EntityStatus = 'existing' | 'created' | 'create_failed';
+
+function normalizeName(nombre: string): string {
   return nombre.trim().toLowerCase();
 }
 
-function formatBudgetLine(payload: PresupuestoPayload, createdId: string, montoTotal: number, clienteStatus: ClienteStatus): string {
+function formatBudgetLine(payload: PresupuestoPayload, createdId: string, montoTotal: number, clienteStatus: EntityStatus): string {
   const clienteNote = clienteStatus === 'created'
     ? 'cliente nuevo (contacto pendiente de completar)'
     : clienteStatus === 'create_failed'
@@ -99,6 +95,11 @@ function formatBudgetLine(payload: PresupuestoPayload, createdId: string, montoT
       : 'cliente ya existente';
   const incompleteNote = payload.estadoComercial === 'Incompleto' ? ' Quedó marcado "Incompleto" para revisar a mano.' : '';
   return `${createdId} para "${payload.cliente}" ($${montoTotal.toLocaleString('es-AR')}) — ${clienteNote}.${incompleteNote}`;
+}
+
+function formatInvoiceLine(payload: EgresoPayload, ref: string, proveedorStatus: EntityStatus): string {
+  const proveedorNote = proveedorStatus === 'created' ? 'proveedor nuevo' : 'proveedor ya existente';
+  return `${ref}: ${payload.categoria} de $${payload.monto.toLocaleString('es-AR')} a "${payload.proveedor}" (${proveedorNote}). Quedó marcado "Incompleto" — todavía no se asocia a una venta/obra.`;
 }
 
 export default async function handler(request: Request) {
@@ -148,6 +149,7 @@ export default async function handler(request: Request) {
     const summaries: FileSummary[] = [];
     let primary: { documentType: string; data: unknown; ready: boolean } | undefined;
     const budgetItems: BudgetItem[] = [];
+    const invoiceItems: InvoiceItem[] = [];
     const linesBySummary = new Map<FileSummary, string[]>();
     const skippedBySummary = new Map<FileSummary, number>();
 
@@ -180,11 +182,12 @@ export default async function handler(request: Request) {
           .maybeSingle();
 
         if (cached && Array.isArray(cached.used_action_ids) && cached.used_action_ids.length > 0) {
+          const entityNote = cached.document_type === 'expense' ? 'egreso' : 'presupuesto';
           summaries.push({
             name,
             size: file.size,
             documentType: cached.document_type ?? undefined,
-            summary: `"${name}": ya había sido cargado (presupuesto ${cached.used_action_ids.join(', ')}) — no se hizo ninguna acción.`,
+            summary: `"${name}": ya había sido cargado (${entityNote} ${cached.used_action_ids.join(', ')}) — no se hizo ninguna acción.`,
           });
           continue;
         }
@@ -220,9 +223,17 @@ export default async function handler(request: Request) {
         const assistantDocId = insertedDoc.id as string;
 
         if (envelope.documentType === 'expense' && envelope.data) {
-          const { text, ready } = summarizeExpense(name, envelope.data);
-          summaries.push({ name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: text });
-          if (!primary) primary = { documentType: envelope.documentType, data: envelope.data, ready };
+          // Factura de compra: se crea directo más abajo, junto con el resto del
+          // lote — acá solo se valida y se deja reservado el lugar del reporte.
+          const validation = validateExpense(envelope.data);
+          const summaryEntry: FileSummary = { name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: '' };
+          summaries.push(summaryEntry);
+          if (validation.ok) {
+            invoiceItems.push({ assistantDocId, payload: validation.payload!, summaryRef: summaryEntry });
+          } else {
+            summaryEntry.summary = `"${name}": encontré una factura pero no pude identificar el proveedor o el monto en el documento — no la cargué, esos datos no los puedo inventar. Decime esos datos o cargala a mano.`;
+            summaryEntry.error = 'missing_proveedor';
+          }
         } else if (envelope.documentType === 'income' && envelope.data) {
           const { text, ready } = summarizeIncome(name, envelope.data);
           summaries.push({ name, size: file.size, documentType: envelope.documentType, confidence: envelope.confidence, summary: text });
@@ -289,11 +300,11 @@ export default async function handler(request: Request) {
     // el usuario no confirma nada, el upload en sí ya es la acción.
     if (budgetItems.length > 0) {
       const { data: clientesExistentes } = await supabase.from('clientes').select('nombre').eq('activo', true);
-      const nombresConocidos = new Set((clientesExistentes ?? []).map((c) => normalizeCliente(c.nombre)));
-      const clienteStatus = new Map<string, ClienteStatus>();
+      const nombresConocidos = new Set((clientesExistentes ?? []).map((c) => normalizeName(c.nombre)));
+      const clienteStatus = new Map<string, EntityStatus>();
 
       for (const item of budgetItems) {
-        const key = normalizeCliente(item.payload.cliente);
+        const key = normalizeName(item.payload.cliente);
         if (clienteStatus.has(key)) continue;
         if (nombresConocidos.has(key)) {
           clienteStatus.set(key, 'existing');
@@ -313,7 +324,7 @@ export default async function handler(request: Request) {
         budgetItems.forEach((item, i) => {
           const created = creados[i];
           if (!created) return;
-          const status = clienteStatus.get(normalizeCliente(item.payload.cliente)) ?? 'existing';
+          const status = clienteStatus.get(normalizeName(item.payload.cliente)) ?? 'existing';
           const total = created.monto_total ?? (item.payload.costoMat + item.payload.costoMo + (item.payload.indVendidos ?? 0) + (item.payload.impuestos ?? 0) + (item.payload.comercial ?? 0) + (item.payload.beneficio ?? 0));
 
           if (!linesBySummary.has(item.summaryRef)) linesBySummary.set(item.summaryRef, []);
@@ -330,6 +341,36 @@ export default async function handler(request: Request) {
         for (const item of budgetItems) {
           if (!linesBySummary.has(item.summaryRef)) linesBySummary.set(item.summaryRef, []);
           linesBySummary.get(item.summaryRef)!.push(`"${item.payload.cliente}": no se pudo crear (${batchResult.error}).`);
+        }
+      }
+    }
+
+    // Las facturas detectadas en este upload se crean una por una (no hay
+    // "expense_group" — un documento de factura trae siempre un solo egreso).
+    // Se procesan en secuencia (await, no Promise.all) porque create_egreso
+    // crea el proveedor al vuelo si no existe, leyendo la tabla en cada
+    // llamada — la secuencialidad evita crear el mismo proveedor nuevo dos
+    // veces cuando dos facturas del mismo lote comparten proveedor.
+    if (invoiceItems.length > 0) {
+      const { data: proveedoresExistentes } = await supabase.from('proveedores').select('nombre').eq('activo', true);
+      const nombresConocidos = new Set((proveedoresExistentes ?? []).map((p) => normalizeName(p.nombre)));
+
+      for (const item of invoiceItems) {
+        const key = normalizeName(item.payload.proveedor);
+        const proveedorStatus: EntityStatus = nombresConocidos.has(key) ? 'existing' : 'created';
+        nombresConocidos.add(key);
+
+        const result = await executeAction('create_egreso', { ...item.payload }, user.id);
+
+        if (!linesBySummary.has(item.summaryRef)) linesBySummary.set(item.summaryRef, []);
+        if (result.ok) {
+          const created = result.data as { ref: string } | undefined;
+          linesBySummary.get(item.summaryRef)!.push(formatInvoiceLine(item.payload, created?.ref ?? '?', proveedorStatus));
+          if (created?.ref) {
+            await supabase.from('assistant_documents').update({ used_action_ids: [created.ref] }).eq('id', item.assistantDocId);
+          }
+        } else {
+          linesBySummary.get(item.summaryRef)!.push(`"${item.payload.proveedor}": no se pudo crear (${result.error}).`);
         }
       }
     }

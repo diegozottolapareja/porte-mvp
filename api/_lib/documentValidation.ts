@@ -31,31 +31,52 @@ function checkMathConsistency(data: ExtractedDocumentData): string[] {
 }
 
 export interface EgresoPayload {
-  fecha?: string; tipoEgreso: string; proveedor?: string; categoria: string; monto: number;
+  fecha?: string; tipoEgreso: string; proveedor: string; categoria: string; monto: number;
+  estado: 'Incompleto';
 }
 
+// Una factura (expense) siempre trae un proveedor y un monto — esos dos datos
+// no se pueden inventar, así que son los únicos que bloquean la carga (mismo
+// criterio que "cliente" en validateBudget). El resto (tipoEgreso, categoria)
+// se completa con un default razonable ("OTROS") en vez de bloquear, porque
+// una factura de compra real rara vez trae esa clasificación interna de
+// Porte. El egreso se crea igual, siempre marcado "Incompleto": todavía no
+// hay forma de asociar un egreso cargado por factura a una venta/obra.
 export function validateExpense(data: ExtractedDocumentData): ValidationResult<EgresoPayload> {
   const missingFields: string[] = [];
   const monto = data.monto ?? (data.subtotal != null && data.impuestos != null ? data.subtotal + data.impuestos : null);
 
   if (!data.proveedor) missingFields.push('proveedor');
-  if (!data.tipoEgreso || !TIPO_EGRESO.includes(data.tipoEgreso)) missingFields.push('tipoEgreso');
-  if (!data.categoria || !CATEGORIA_EGRESO.includes(data.categoria.toUpperCase())) missingFields.push('categoria');
   if (monto == null || monto <= 0) missingFields.push('monto');
 
   if (missingFields.length > 0) return { ok: false, missingFields, warnings: [] };
+
+  const warnings = checkMathConsistency(data);
+
+  let tipoEgreso = data.tipoEgreso ?? undefined;
+  if (!tipoEgreso || !TIPO_EGRESO.includes(tipoEgreso)) {
+    tipoEgreso = 'OTROS';
+    warnings.push('tipo de egreso (no encontrado en el documento, uso OTROS)');
+  }
+
+  let categoria = data.categoria?.toUpperCase();
+  if (!categoria || !CATEGORIA_EGRESO.includes(categoria)) {
+    categoria = 'OTROS';
+    warnings.push('categoría (no encontrada en el documento, uso OTROS)');
+  }
 
   return {
     ok: true,
     payload: {
       fecha: data.fecha ?? undefined,
-      tipoEgreso: data.tipoEgreso!,
-      proveedor: data.proveedor ?? undefined,
-      categoria: data.categoria!.toUpperCase(),
+      tipoEgreso,
+      proveedor: data.proveedor!,
+      categoria,
       monto: monto!,
+      estado: 'Incompleto',
     },
     missingFields: [],
-    warnings: checkMathConsistency(data),
+    warnings,
   };
 }
 

@@ -10,4 +10,4 @@ export const CATEG_INDIRECTOS = ['ALQUILER', 'SUELDOS', 'SERVICIOS', 'IMPUESTOS'
 export const CUENTAS = ['Banco Macro', 'MercadoPago', 'Efectivo Blanco', 'Efectivo Negro'];
 export const TIPO_CAJA = ['BLANCA', 'NEGRA'];
 export const ESTADO_INGRESO = ['Confirmado', 'Pendiente'];
-export const ESTADO_EGRESO = ['Confirmado', 'Pendiente', 'Emitido'];
+export const ESTADO_EGRESO = ['Confirmado', 'Pendiente', 'Emitido', 'Incompleto'];

@@ -42,14 +42,17 @@ Ingresos:
 - "cuenta" y "caja" — mismo criterio que en egresos: siempre preguntar antes de confirmar.
 
 Documentos adjuntos (fotos, PDF):
-- Los presupuestos extraídos de un documento adjunto (PDF/foto) se cargan solos apenas
-  el usuario lo sube — el upload en sí ya crea el presupuesto (y el cliente, si no
-  existía) sin pasar por vos. Nunca vas a ver una extracción pendiente de tipo
-  presupuesto ni tenés que confirmarla ni llamar a create_presupuesto/
-  create_budget_batch por eso — el resultado ya viene contado en el mensaje del
-  usuario. Si te preguntan por un presupuesto que acaban de subir, referite a ese
-  resultado, no repitas la carga.
-- Los comprobantes de egreso/ingreso sí quedan pendientes de confirmación — cuando el
+- Los presupuestos y las facturas de compra (egresos) extraídos de un documento
+  adjunto (PDF/foto) se cargan solos apenas el usuario lo sube — el upload en sí ya
+  crea el presupuesto (y el cliente, si no existía) o el egreso (y el proveedor, si
+  no existía) sin pasar por vos. El egreso creado desde una factura siempre queda
+  "Incompleto" (todavía no hay forma de asociarlo a una venta/obra), y nunca lleva
+  cuenta/caja. Nunca vas a ver una extracción pendiente de tipo presupuesto ni de
+  tipo factura/egreso ni tenés que confirmarlas ni llamar a create_presupuesto/
+  create_budget_batch/create_egreso por eso — el resultado ya viene contado en el
+  mensaje del usuario. Si te preguntan por un presupuesto o una factura que acaban
+  de subir, referite a ese resultado, no repitas la carga.
+- Los comprobantes de ingreso sí quedan pendientes de confirmación — cuando el
   usuario adjunta uno, ya viene clasificado y con los datos extraídos en el contexto
   de la conversación (documentType, confidence, campos); no vuelvas a pedirle que te
   lo describa.

@@ -3,7 +3,7 @@ import type { TipoEgreso, Cuenta, TipoCaja } from './config'
 // ─── Egresos (04_EGRESOS) ──────────────────────────────────────────────────────
 // La tab está vacía en el Excel original — datos inventados coherentes con obras y proveedores.
 
-export type EstadoEgreso = 'Confirmado' | 'Pendiente' | 'Emitido'
+export type EstadoEgreso = 'Confirmado' | 'Pendiente' | 'Emitido' | 'Incompleto'
 
 export interface Egreso {
   fecha: string

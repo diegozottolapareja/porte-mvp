@@ -29,6 +29,16 @@ const ACTION_TABLES: Record<string, TableKey[]> = {
   create_cliente: ['clientes'],
 }
 
+// Los presupuestos y las facturas extraídos de un PDF/foto se crean directo
+// en el request de upload (ver api/assistant/upload.ts) — sin pasar por
+// response.action como el resto de las acciones, así que necesitan su propio
+// mapeo de qué tablas refetchear según el documentType de cada archivo.
+const UPLOAD_DOCUMENT_TABLES: Record<string, TableKey[]> = {
+  budget: ['presupuestos', 'clientes'],
+  budget_group: ['presupuestos', 'clientes'],
+  expense: ['egresos', 'proveedores'],
+}
+
 export default function AsistentePage() {
   const navigate = useNavigate()
   const { refetch } = usePorteData()
@@ -116,6 +126,15 @@ export default function AsistentePage() {
 
       conversationIdRef.current = response.conversationId
       setMessages(prev => prev.map(m => (m.id === pendingId ? { ...m, content: response.message ?? '', pending: false, pendingAction: response.pendingAction } : m)))
+
+      // Los presupuestos/facturas ya se crearon del lado del backend durante el
+      // upload en sí (no hay confirmación posterior) — sin este refetch el
+      // usuario solo vería el dato nuevo al recargar la página manualmente.
+      const tablesToRefetch = new Set<TableKey>()
+      for (const f of response.files ?? []) {
+        UPLOAD_DOCUMENT_TABLES[f.documentType ?? '']?.forEach(t => tablesToRefetch.add(t))
+      }
+      if (tablesToRefetch.size > 0) refetch([...tablesToRefetch])
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
       setMessages(prev => prev.map(m => (m.id === pendingId ? { ...m, content: errorMessage, pending: false, error: true } : m)))

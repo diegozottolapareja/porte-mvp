@@ -1,13 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { EstadoOperativoSelect } from '@/components/EstadoOperativoSelect'
+import { Pager } from '@/components/Pager'
 import { ESTADO_OPERATIVO_CONFIG, ESTADO_COBRO_CONFIG, CONFIG_LISTS, getTotalCobrado, getEstadoCobro, type EstadoOperativo } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency } from '@/lib/format'
+import { formatCurrency, extractIdSeq } from '@/lib/format'
+
+const PAGE_SIZE = 20
 
 // El alta manual de ventas (VentaDialog) está deshabilitada: además de tener
 // una incompatibilidad estructural preexistente con ventas.id → presupuestos.id
@@ -19,9 +22,20 @@ export default function VentasPage() {
   const { can } = useAuth()
   const { ventas, ingresos, updateVenta } = usePorteData()
   const [estadoFilter, setEstadoFilter] = useState<string>('all')
+  const [page, setPage] = useState(1)
 
-  const ventasFiltradas = ventas.filter(v => estadoFilter === 'all' || v.estadoOp === estadoFilter)
+  const ventasFiltradas = ventas
+    .filter(v => estadoFilter === 'all' || v.estadoOp === estadoFilter)
+    .sort((a, b) => extractIdSeq(b.id) - extractIdSeq(a.id))
   const puedeEditar = can('ventas:write')
+
+  const totalPages = Math.max(1, Math.ceil(ventasFiltradas.length / PAGE_SIZE))
+  const pageClamped = Math.min(page, totalPages)
+  const ventasPagina = ventasFiltradas.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE)
+
+  useEffect(() => {
+    setPage(1)
+  }, [estadoFilter])
 
   return (
     <AppShell title="Ventas">
@@ -33,8 +47,10 @@ export default function VentasPage() {
           ))}
         </div>
 
+        <p className="text-sm text-muted-foreground">{ventasFiltradas.length} venta{ventasFiltradas.length !== 1 ? 's' : ''}</p>
+
         <EntityList
-          items={ventasFiltradas}
+          items={ventasPagina}
           keyExtractor={v => v.id}
           emptyTitle="Sin ventas"
           emptyDescription="No hay ventas que coincidan con el filtro."
@@ -65,6 +81,8 @@ export default function VentasPage() {
             />
           )}
         />
+
+        <Pager page={pageClamped} totalPages={totalPages} onChange={setPage} />
       </div>
     </AppShell>
   )
