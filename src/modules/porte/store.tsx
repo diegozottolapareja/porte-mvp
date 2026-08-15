@@ -43,6 +43,8 @@ function nextSeqId(prefix: string, ids: string[]): string {
   return `${prefix}-${String(max + 1).padStart(4, '0')}`
 }
 
+export type TableKey = 'ingresos' | 'egresos' | 'presupuestos' | 'ventas' | 'proveedores' | 'clientes' | 'gastosFijos' | 'variaciones' | 'aprendizajes'
+
 interface PorteDataContextType {
   isLoading: boolean
   ingresos: Ingreso[]
@@ -83,12 +85,14 @@ interface PorteDataContextType {
   updateAprendizaje: (idApr: string, data: Partial<Aprendizaje>) => void
 
   /**
-   * Re-lee todas las tablas desde Supabase. Necesario después de mutaciones que
-   * pasan por afuera del store (ej. el asistente crea presupuestos/egresos/ingresos
+   * Re-lee tablas desde Supabase. Necesario después de mutaciones que pasan
+   * por afuera del store (ej. el asistente crea presupuestos/egresos/ingresos
    * vía el backend con service role) — sin esto, el usuario ve el dato recién
-   * creado solo al recargar la página.
+   * creado solo al recargar la página. Sin argumentos relee las 9 tablas
+   * (uso: carga inicial / re-foco de pestaña); pasando `tables` relee solo
+   * esas — usado por el asistente, que sabe qué tabla tocó su acción.
    */
-  refetch: () => Promise<void>
+  refetch: (tables?: TableKey[]) => Promise<void>
 
   nextPresupuestoId: () => string
 
@@ -166,7 +170,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
   const authGuardRef = useRef(isAuthenticated)
   useEffect(() => { authGuardRef.current = isAuthenticated }, [isAuthenticated])
 
-  const loadAll = useCallback(async () => {
+  const loadAllImpl = useCallback(async () => {
     const [ing, egr, pre, ven, prov, cli, gf, vcar, apr] = await Promise.all([
       supabase.from('ingresos').select('*').order('created_at', { ascending: false }),
       supabase.from('egresos').select('*').order('created_at', { ascending: false }),
@@ -190,6 +194,78 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
     if (apr.data) setAprendizajes(apr.data.map(rowToAprendizaje))
     setIsLoading(false)
   }, [])
+
+  // `visibilitychange` y `focus` suelen dispararse casi al mismo tiempo para
+  // el mismo evento real (volver a la pestaña, recuperar el foco de la
+  // ventana) — sin esta guarda, cada uno dispararía su propio loadAllImpl()
+  // y las 9 tablas se pedirían por duplicado.
+  const loadAllInFlightRef = useRef<Promise<void> | null>(null)
+  const loadAll = useCallback(() => {
+    if (!loadAllInFlightRef.current) {
+      loadAllInFlightRef.current = loadAllImpl().finally(() => { loadAllInFlightRef.current = null })
+    }
+    return loadAllInFlightRef.current
+  }, [loadAllImpl])
+
+  // Relee solo las tablas pedidas, sin tocar isLoading — a diferencia de
+  // loadAll() (carga inicial completa), esto es para refrescar después de una
+  // mutación puntual que ya sabemos qué tabla(s) tocó.
+  const loadTables = useCallback(async (tables: TableKey[]) => {
+    await Promise.all(tables.map(async (table) => {
+      switch (table) {
+        case 'ingresos': {
+          const { data } = await supabase.from('ingresos').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setIngresos(data.map(rowToIngreso))
+          break
+        }
+        case 'egresos': {
+          const { data } = await supabase.from('egresos').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setEgresos(data.map(rowToEgreso))
+          break
+        }
+        case 'presupuestos': {
+          const { data } = await supabase.from('presupuestos').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setPresupuestos(data.map(rowToPresupuesto))
+          break
+        }
+        case 'ventas': {
+          const { data } = await supabase.from('v_ventas_detalle').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setVentas(data.map(rowToVenta))
+          break
+        }
+        case 'proveedores': {
+          const { data } = await supabase.from('v_proveedores_saldo').select('*')
+          if (authGuardRef.current && data) setProveedores(data.map(rowToProveedor))
+          break
+        }
+        case 'clientes': {
+          const { data } = await supabase.from('clientes').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setClientes(data.map(rowToCliente))
+          break
+        }
+        case 'gastosFijos': {
+          const { data } = await supabase.from('gastos_fijos').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setGastosFijos(data.map(rowToGastoFijo))
+          break
+        }
+        case 'variaciones': {
+          const { data } = await supabase.from('variaciones').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setVariaciones(data.map(rowToVariacion))
+          break
+        }
+        case 'aprendizajes': {
+          const { data } = await supabase.from('aprendizajes').select('*').order('created_at', { ascending: false })
+          if (authGuardRef.current && data) setAprendizajes(data.map(rowToAprendizaje))
+          break
+        }
+      }
+    }))
+  }, [])
+
+  const refetch: PorteDataContextType['refetch'] = useCallback(
+    (tables) => (tables && tables.length > 0 ? loadTables(tables) : loadAll()),
+    [loadTables, loadAll],
+  )
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -491,7 +567,7 @@ export function PorteDataProvider({ children }: { children: ReactNode }) {
         ingresos, egresos, presupuestos, ventas, proveedores, clientes, gastosFijos, variaciones, aprendizajes,
         addIngreso, addEgreso, addPresupuesto, addVenta, addProveedor, addCliente, findOrCreateCliente, addGastoFijo, addVariacion, addAprendizaje,
         updateIngreso, updateEgreso, updatePresupuesto, updateVenta, updateProveedor, updateCliente, updateGastoFijo, updateVariacion, updateAprendizaje,
-        refetch: loadAll,
+        refetch,
         nextPresupuestoId,
         aceptarPresupuesto,
         convertirEnVenta,

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Plus, Search } from 'lucide-react'
 import { toast } from 'sonner'
@@ -7,11 +7,14 @@ import { EntityList } from '@/components/EntityList'
 import { EntityCard } from '@/components/EntityCard'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { Pager } from '@/components/Pager'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ESTADO_COMERCIAL_CONFIG, CONFIG_LISTS, type EstadoComercial, type Presupuesto } from '@/modules/porte'
 import { usePorteData } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
-import { formatCurrency, formatDate } from '@/lib/format'
+import { formatCurrency, formatDate, extractIdSeq } from '@/lib/format'
+
+const PAGE_SIZE = 20
 
 export default function PresupuestosPage() {
   const navigate = useNavigate()
@@ -21,6 +24,7 @@ export default function PresupuestosPage() {
   const [estadoFilter, setEstadoFilter] = useState<string>('all')
   const [categoriaFilter, setCategoriaFilter] = useState<string>('all')
   const [pendingDelete, setPendingDelete] = useState<Presupuesto | null>(null)
+  const [page, setPage] = useState(1)
   const puedeEditar = can('presupuestos:write')
   const puedeEliminar = can('presupuestos:delete')
 
@@ -52,6 +56,15 @@ export default function PresupuestosPage() {
       const q = query.toLowerCase()
       return !q || p.id.toLowerCase().includes(q) || p.cliente.toLowerCase().includes(q)
     })
+    .sort((a, b) => extractIdSeq(b.id) - extractIdSeq(a.id))
+
+  const totalPages = Math.max(1, Math.ceil(presupuestos.length / PAGE_SIZE))
+  const pageClamped = Math.min(page, totalPages)
+  const presupuestosPagina = presupuestos.slice((pageClamped - 1) * PAGE_SIZE, pageClamped * PAGE_SIZE)
+
+  useEffect(() => {
+    setPage(1)
+  }, [query, estadoFilter, categoriaFilter])
 
   return (
     <AppShell
@@ -92,7 +105,7 @@ export default function PresupuestosPage() {
         <p className="text-sm text-muted-foreground">{presupuestos.length} presupuesto{presupuestos.length !== 1 ? 's' : ''}</p>
 
         <EntityList
-          items={presupuestos}
+          items={presupuestosPagina}
           keyExtractor={p => p.id}
           emptyTitle="Sin presupuestos"
           emptyDescription="No hay presupuestos que coincidan con el filtro."
@@ -130,6 +143,8 @@ export default function PresupuestosPage() {
             />
           )}
         />
+
+        <Pager page={pageClamped} totalPages={totalPages} onChange={setPage} />
       </div>
 
       <ConfirmModal

@@ -29,3 +29,10 @@ export function localDateString(date: Date): string {
 export function todayLocal(): string {
   return localDateString(new Date())
 }
+
+/** Extrae la parte numérica de un ID tipo "PR - 0004" para poder ordenar por
+ * antigüedad (más nuevo primero) sin depender de un campo numérico aparte. */
+export function extractIdSeq(id: string): number {
+  const digits = id.replace(/\D/g, '')
+  return digits ? Number(digits) : 0
+}

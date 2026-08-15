@@ -6,8 +6,10 @@ import { AppShell } from '@/components/AppShell'
 import { EmptyState } from '@/components/EmptyState'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { ProveedorDialog } from '@/components/ProveedorDialog'
 import { usePorteData } from '@/modules/porte/store'
 import { formatCurrency, formatDate } from '@/lib/format'
+import type { Proveedor } from '@/modules/porte'
 
 export default function ProveedorDetailPage() {
   const navigate = useNavigate()
@@ -16,6 +18,7 @@ export default function ProveedorDetailPage() {
   const proveedor = proveedores.find(p => p.idProv === decodeURIComponent(id ?? ''))
   const egresosProveedor = egresos.filter(e => e.proveedor === proveedor?.idProv)
   const [pendingDelete, setPendingDelete] = useState(false)
+  const [editing, setEditing] = useState<Proveedor | null>(null)
 
   if (!proveedor) {
     return (
@@ -30,11 +33,18 @@ export default function ProveedorDetailPage() {
       title={proveedor.nombre}
       onBack={() => navigate(-1)}
       actions={
-        <PermissionGuard permission="proveedores:delete">
-          <button onClick={() => setPendingDelete(true)} className="text-sm font-medium text-destructive lg:px-3 lg:py-1.5">
-            Eliminar
-          </button>
-        </PermissionGuard>
+        <div className="flex items-center gap-4 lg:gap-2">
+          <PermissionGuard permission="proveedores:write">
+            <button onClick={() => setEditing(proveedor)} className="text-sm font-medium text-white lg:text-primary lg:px-3 lg:py-1.5">
+              Editar
+            </button>
+          </PermissionGuard>
+          <PermissionGuard permission="proveedores:delete">
+            <button onClick={() => setPendingDelete(true)} className="text-sm font-medium text-destructive lg:px-3 lg:py-1.5">
+              Eliminar
+            </button>
+          </PermissionGuard>
+        </div>
       }
     >
       <div className="space-y-4">
@@ -83,6 +93,8 @@ export default function ProveedorDetailPage() {
           navigate('/proveedores')
         }}
       />
+
+      <ProveedorDialog value={editing} onClose={() => setEditing(null)} />
     </AppShell>
   )
 }

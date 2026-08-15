@@ -71,6 +71,24 @@ async function buildAuthUser(supabaseUser: { id: string; email?: string }): Prom
   }
 }
 
+// `buildAuthUser` termina disparándose para el mismo usuario desde hasta 3
+// lugares casi al mismo tiempo (getSession() al montar, el evento
+// INITIAL_SESSION de onAuthStateChange, y el SIGNED_IN que dispara
+// signInWithPassword durante login()) — sin esto cada uno hacía su propio
+// GET a `profiles` por separado. Cachea la promesa en vuelo por userId así
+// las llamadas concurrentes comparten un único request real.
+let pendingBuild: { userId: string; promise: Promise<AuthUser> } | null = null
+
+function buildAuthUserOnce(supabaseUser: { id: string; email?: string }): Promise<AuthUser> {
+  if (pendingBuild && pendingBuild.userId === supabaseUser.id) return pendingBuild.promise
+  const promise = buildAuthUser(supabaseUser)
+  pendingBuild = { userId: supabaseUser.id, promise }
+  promise.finally(() => {
+    if (pendingBuild?.promise === promise) pendingBuild = null
+  })
+  return promise
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -79,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         try {
-          setUser(await buildAuthUser(session.user))
+          setUser(await buildAuthUserOnce(session.user))
         } catch {
           setUser(null)
         }
@@ -89,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        buildAuthUser(session.user).then(setUser).catch(() => setUser(null))
+        buildAuthUserOnce(session.user).then(setUser).catch(() => setUser(null))
       } else {
         setUser(null)
       }
@@ -107,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async ({ email, password }: LoginCredentials) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error || !data.user) throw new Error('Email o contraseña incorrectos')
-    const authUser = await buildAuthUser(data.user)
+    const authUser = await buildAuthUserOnce(data.user)
     setUser(authUser)
     return authUser
   }

@@ -8,12 +8,25 @@ import { VoiceRecorder } from '@/components/assistant/VoiceRecorder'
 import { FileAttachButton } from '@/components/assistant/FileAttachButton'
 import { AttachmentPreview } from '@/components/assistant/AttachmentPreview'
 import { sendAssistantMessage, transcribeAudio, uploadAssistantFiles } from '@/lib/assistantApi'
-import { usePorteData } from '@/modules/porte/store'
+import { usePorteData, type TableKey } from '@/modules/porte/store'
 
 const WELCOME_MESSAGE: ChatMessageData = {
   id: 'welcome',
   role: 'assistant',
   content: 'Hola, soy el asistente de Porte. Contame qué presupuesto querés cargar — por texto, audio o adjuntando una foto o PDF de un comprobante.',
+}
+
+// Mapea el nombre de acción del backend (ver api/_lib/actionExecutor.ts) a las
+// tablas del store que esa acción efectivamente toca — evita refetchear las 9
+// tablas del store por una acción que solo escribió una o dos. Una acción sin
+// entrada acá (nueva o no reconocida) cae al refetch completo por defecto,
+// que es el comportamiento seguro previo.
+const ACTION_TABLES: Record<string, TableKey[]> = {
+  create_presupuesto: ['presupuestos', 'clientes'],
+  create_budget_batch: ['presupuestos', 'clientes'],
+  create_egreso: ['egresos', 'proveedores'],
+  create_ingreso: ['ingresos'],
+  create_cliente: ['clientes'],
 }
 
 export default function AsistentePage() {
@@ -56,8 +69,9 @@ export default function AsistentePage() {
         if (response.action.ok) {
           // La acción se ejecutó del lado del backend (service role), fuera del
           // store — sin este refetch, el usuario solo vería el dato nuevo al
-          // recargar la página manualmente.
-          refetch()
+          // recargar la página manualmente. Se relee solo la(s) tabla(s) que la
+          // acción tocó en vez de las 9 del store (ver ACTION_TABLES arriba).
+          refetch(ACTION_TABLES[response.action.name])
         } else {
           toast.error(response.action.error ?? 'No se pudo ejecutar la acción')
         }

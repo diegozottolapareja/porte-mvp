@@ -6,8 +6,10 @@ import { AppShell } from '@/components/AppShell'
 import { EmptyState } from '@/components/EmptyState'
 import { PermissionGuard } from '../components/PermissionGuard'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { ClienteDialog } from '@/components/ClienteDialog'
 import { usePorteData } from '@/modules/porte/store'
 import { formatCurrency } from '@/lib/format'
+import type { Cliente } from '@/modules/porte'
 
 export default function ClienteDetailPage() {
   const navigate = useNavigate()
@@ -20,6 +22,7 @@ export default function ClienteDetailPage() {
     ? ventas.filter(v => v.cliente.trim().toLowerCase() === cliente.nombre.trim().toLowerCase())
     : []
   const [pendingDelete, setPendingDelete] = useState(false)
+  const [editing, setEditing] = useState<Cliente | null>(null)
 
   if (!cliente) {
     return (
@@ -34,11 +37,18 @@ export default function ClienteDetailPage() {
       title={cliente.nombre}
       onBack={() => navigate(-1)}
       actions={
-        <PermissionGuard permission="clientes:delete">
-          <button onClick={() => setPendingDelete(true)} className="text-sm font-medium text-destructive lg:px-3 lg:py-1.5">
-            Eliminar
-          </button>
-        </PermissionGuard>
+        <div className="flex items-center gap-4 lg:gap-2">
+          <PermissionGuard permission="clientes:write">
+            <button onClick={() => setEditing(cliente)} className="text-sm font-medium text-white lg:text-primary lg:px-3 lg:py-1.5">
+              Editar
+            </button>
+          </PermissionGuard>
+          <PermissionGuard permission="clientes:delete">
+            <button onClick={() => setPendingDelete(true)} className="text-sm font-medium text-destructive lg:px-3 lg:py-1.5">
+              Eliminar
+            </button>
+          </PermissionGuard>
+        </div>
       }
     >
       <div className="space-y-4">
@@ -90,6 +100,8 @@ export default function ClienteDetailPage() {
           navigate('/clientes')
         }}
       />
+
+      <ClienteDialog value={editing} onClose={() => setEditing(null)} />
     </AppShell>
   )
 }
