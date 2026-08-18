@@ -14,6 +14,9 @@ export interface Ingreso {
   caja: TipoCaja
   estado: EstadoIngreso
   ref: string
+  cajaId?: string           // FK a `cajas` — reemplaza `cuenta` como fuente real para las RPC financieras
+  metodoCobroId?: string    // FK a `metodos_cobro` — deriva cajaId/fechaAcreditacion/comisión
+  fechaAcreditacion?: string // cuándo se espera (o ya se acreditó) la plata en caja — distinto de `fecha` (operación)
   activo: boolean
   createdAt: string
   createdBy: string

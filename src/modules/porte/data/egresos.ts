@@ -16,6 +16,7 @@ export interface Egreso {
   caja: TipoCaja
   estado: EstadoEgreso
   ref: string
+  cajaId?: string               // FK a `cajas` — reemplaza `cuenta` como fuente real para las RPC financieras
   fechaEmision?: string         // solo cheques
   fechaAcreditacion?: string
   comprobantePath?: string     // path en Storage (bucket "comprobantes") de la factura original, si vino de una carga por PDF

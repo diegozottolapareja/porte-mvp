@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/app/components/ui/button'
 import { PillSelect } from '@/components/PillSelect'
 import { calcDiferencia, CONFIG_LISTS, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja } from '@/modules/porte'
-import { useGastosFijos, useGastoFijoActions } from '@/modules/porte/store'
+import { useGastosFijos, useGastoFijoActions, useCajas, useMetodosPago } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { isNegativeAmount } from '@/lib/validation'
@@ -119,6 +119,8 @@ export default function GastosFijosPage() {
 function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null; onClose: () => void }) {
   const { user } = useAuth()
   const { addGastoFijo, updateGastoFijo } = useGastoFijoActions()
+  const cajas = useCajas()
+  const metodosPago = useMetodosPago()
   const existing = value && value !== 'nuevo' ? value : undefined
 
   const [fecha, setFecha] = useState(existing?.fecha ?? todayLocal())
@@ -127,10 +129,28 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
   const [montoPrevisto, setMontoPrevisto] = useState(existing?.montoPrevisto?.toString() ?? '')
   const [montoReal, setMontoReal] = useState(existing?.montoReal?.toString() ?? '')
   const [periodicidad, setPeriodicidad] = useState<Periodicidad>(existing?.periodicidad ?? 'Mensual')
-  const [cuenta, setCuenta] = useState<Cuenta>(existing?.cuenta ?? CONFIG_LISTS.CUENTAS[0])
-  const [tipoCaja, setTipoCaja] = useState<TipoCaja>(existing?.tipoCaja ?? 'BLANCA')
+  // "Caja" (entidad real) reemplaza al viejo selector de "Cuenta" — mismo
+  // criterio que Ingreso/Egreso (round 2): son la misma lista mostrada dos
+  // veces. `cuenta`/`tipoCaja` (legacy) se derivan de la caja elegida.
+  const [cajaId, setCajaId] = useState(existing?.cajaId ?? '')
+  const [cuentaLegacy] = useState<Cuenta>(existing?.cuenta ?? CONFIG_LISTS.CUENTAS[0])
+  const [caja, setCaja] = useState<TipoCaja>(existing?.tipoCaja ?? 'BLANCA')
+  const [metodoPagoId, setMetodoPagoId] = useState(existing?.metodoPagoId ?? '')
   const [estado, setEstado] = useState<EstadoGastoFijo>(existing?.estado ?? 'PREVISTO')
   const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
+
+  const cajaSeleccionada = cajas.find(c => c.id === cajaId)
+  const cuenta = (cajaSeleccionada?.nombre as Cuenta | undefined) ?? cuentaLegacy
+  const tipoCaja = (cajaSeleccionada?.tipoCaja as TipoCaja | undefined) ?? caja
+  const metodoSeleccionado = metodosPago.find(m => m.id === metodoPagoId)
+
+  // Regla de negocio: caja Negra solo admite instrumentos INMEDIATO — mismo
+  // filtrado bidireccional que Egreso (ver 0022_finanzas_regla_caja_instrumento.sql).
+  const cajaElegidaEsNegra = cajaSeleccionada?.tipoCaja === 'NEGRA'
+  const metodosDisponibles = cajaElegidaEsNegra ? metodosPago.filter(m => m.tipo === 'INMEDIATO') : metodosPago
+  const cajasDisponibles = metodoSeleccionado && metodoSeleccionado.tipo !== 'INMEDIATO'
+    ? cajas.filter(c => c.tipoCaja === 'BLANCA')
+    : cajas
 
   const open = value !== null
 
@@ -151,7 +171,7 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
       fecha, concepto, categoria,
       montoPrevisto: Number(montoPrevisto),
       montoReal: montoReal === '' ? null : Number(montoReal),
-      periodicidad, cuenta, tipoCaja, estado,
+      periodicidad, cuenta, tipoCaja, cajaId: cajaSeleccionada?.id, metodoPagoId: metodoPagoId || undefined, estado,
       proveedorId: existing?.proveedorId ?? null,
       observaciones: observaciones || undefined,
     }
@@ -207,19 +227,30 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
             </div>
           </div>
           <div>
-            <label className="text-sm text-muted-foreground mb-1.5 block">Cuenta</label>
+            <label className="text-sm text-muted-foreground mb-1.5 block">Caja</label>
             <div className="flex gap-2 flex-wrap">
-              {CONFIG_LISTS.CUENTAS.map(c => (
-                <button key={c} onClick={() => setCuenta(c)} className={`px-3 py-2 rounded-xl border text-sm ${cuenta === c ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{c}</button>
+              <button onClick={() => setCajaId('')} className={`px-3 py-2 rounded-xl border text-sm ${!cajaId ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>Sin especificar</button>
+              {cajasDisponibles.map(c => (
+                <button key={c.id} onClick={() => setCajaId(c.id)} className={`px-3 py-2 rounded-xl border text-sm ${cajaId === c.id ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{c.nombre}</button>
               ))}
             </div>
           </div>
+          <div>
+            <label className="text-sm text-muted-foreground mb-1.5 block">¿Cómo se paga?</label>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => setMetodoPagoId('')} className={`px-3 py-2 rounded-xl border text-sm ${!metodoPagoId ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>Sin especificar</button>
+              {metodosDisponibles.filter(m => m.activo).map(m => (
+                <button key={m.id} onClick={() => setMetodoPagoId(m.id)} className={`px-3 py-2 rounded-xl border text-sm ${metodoPagoId === m.id ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{m.nombre}</button>
+              ))}
+            </div>
+            {cajaElegidaEsNegra && <p className="text-xs text-muted-foreground mt-1">Caja Negra elegida arriba — solo admite Efectivo o Transferencia.</p>}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">Caja</label>
+              <label className="text-sm text-muted-foreground mb-1.5 block">Tipo de caja</label>
               <div className="flex gap-2">
                 {CONFIG_LISTS.TIPO_CAJA.map(c => (
-                  <button key={c} onClick={() => setTipoCaja(c)} className={`flex-1 py-2.5 rounded-xl border text-sm ${tipoCaja === c ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{c}</button>
+                  <button key={c} onClick={() => setCaja(c)} disabled={!!cajaSeleccionada} className={`flex-1 py-2.5 rounded-xl border text-sm disabled:opacity-40 ${tipoCaja === c ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{c}</button>
                 ))}
               </div>
             </div>

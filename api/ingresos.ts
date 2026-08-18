@@ -98,6 +98,16 @@ export default async function handler(request: Request) {
     if (refsError) throw new Error(`Error leyendo ingresos: ${refsError.message}`);
     const ref = nextRef('IN', (refsExistentes ?? []).map((r) => r.ref));
 
+    // Resuelve la caja real (0018_finanzas_cajas_metodos.sql) a partir de la
+    // `cuenta` de texto — get_caja_actual ya tiene fallback para ingresos
+    // 'Confirmado' sin fecha_acreditacion (usa `fecha`), pero necesita
+    // caja_id para poder desglosar/filtrar por caja correctamente.
+    let cajaId: string | null = null;
+    if (cuenta) {
+      const { data: cajaMatch } = await supabase.from('cajas').select('id').eq('nombre', cuenta).maybeSingle();
+      cajaId = cajaMatch?.id ?? null;
+    }
+
     const { data: creado, error: insertError } = await supabase
       .from('ingresos')
       .insert({
@@ -109,6 +119,7 @@ export default async function handler(request: Request) {
         monto,
         cuenta: cuenta ?? null,
         caja: caja ?? null,
+        caja_id: cajaId,
         estado,
         activo: true,
         created_by: createdBy,

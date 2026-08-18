@@ -1,28 +1,31 @@
 import { useNavigate } from 'react-router'
-import { Wallet, TrendingUp, Hammer, Clock } from 'lucide-react'
+import { Wallet, TrendingUp, Hammer, Clock, Landmark } from 'lucide-react'
 import { AppShell } from '@/components/AppShell'
 import { MetricCard } from '@/components/MetricCard'
 import { EntityCard } from '@/components/EntityCard'
 import { EntityList } from '@/components/EntityList'
 import { ESTADO_OPERATIVO_CONFIG, getTotalCobrado, getSaldoPendiente } from '@/modules/porte'
-import { useVentas, useIngresos, useEgresos } from '@/modules/porte/store'
-import { formatCurrency } from '@/lib/format'
+import { useVentas, useIngresos, useEgresos, useCajaActual } from '@/modules/porte/store'
+import { formatCurrency, todayLocal } from '@/lib/format'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const ventas = useVentas()
   const ingresos = useIngresos()
   const egresos = useEgresos()
+  const { data: cajaActualRows } = useCajaActual(todayLocal())
 
   const ventasActivas = ventas.filter(v => v.estadoOp !== 'Cerrado')
   const totalACobrar = ventasActivas.reduce((sum, v) => sum + getSaldoPendiente(v, ingresos), 0)
   const cobradoDelMes = ventas.reduce((sum, v) => sum + getTotalCobrado(v.id, ingresos), 0)
   const chequesPorVencer = egresos.filter(e => e.activo && e.estado === 'Emitido' && e.fechaAcreditacion).length
+  const cajaActualTotal = (cajaActualRows ?? []).reduce((sum, c) => sum + c.saldoActual, 0)
 
   return (
     <AppShell title="Inicio">
       <div className="space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <MetricCard label="Caja actual" value={formatCurrency(cajaActualTotal)} Icon={Landmark} gradient="from-indigo-600 to-indigo-700" onClick={() => navigate('/finanzas')} />
           <MetricCard label="Ventas activas" value={ventasActivas.length} Icon={Hammer} />
           <MetricCard label="Total a cobrar" value={formatCurrency(totalACobrar)} Icon={Wallet} gradient="from-amber-500 to-amber-600" />
           <MetricCard label="Cobrado del mes" value={formatCurrency(cobradoDelMes)} Icon={TrendingUp} gradient="from-green-600 to-green-700" />

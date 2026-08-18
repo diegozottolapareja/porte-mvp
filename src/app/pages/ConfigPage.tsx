@@ -4,6 +4,75 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { CONFIG_LISTS } from '@/modules/porte'
+import { useMetodosCobro, useMetodosPago, useCajas, useMetodoCobroActions, useMetodoPagoActions } from '@/modules/porte/store'
+import { useAuth } from '../contexts/AuthContext'
+
+// ─── Métodos de cobro/pago (sección 4/7 del pedido) ────────────────────────
+// A diferencia de las listas de arriba (todavía sin persistir — ver TODO en
+// handleAdd), estos sí escriben en Supabase: los usan las RPC financieras
+// (get_pendiente_acreditacion, get_disponible_financiero, etc.) en tiempo real.
+function MetodosFinancierosConfig() {
+  const { user } = useAuth()
+  const metodosCobro = useMetodosCobro()
+  const metodosPago = useMetodosPago()
+  const cajas = useCajas()
+  const { updateMetodoCobro } = useMetodoCobroActions()
+  const { updateMetodoPago } = useMetodoPagoActions()
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl border border-border p-4">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Métodos de cobro</h3>
+        <div className="space-y-3">
+          {metodosCobro.map(m => (
+            <div key={m.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium min-w-24">{m.nombre}</span>
+              <label className="text-xs text-muted-foreground">Días acreditación</label>
+              <input
+                type="number" min="0" step="1" defaultValue={m.diasAcreditacion}
+                onBlur={e => { const v = Number(e.target.value); if (v !== m.diasAcreditacion && user) { updateMetodoCobro(m.id, { diasAcreditacion: v }); toast.success('Método actualizado') } }}
+                className="w-16 h-9 px-2 rounded-lg border border-border text-sm"
+              />
+              <label className="text-xs text-muted-foreground">Comisión %</label>
+              <input
+                type="number" min="0" max="100" step="0.01" defaultValue={m.comisionPorcentaje * 100}
+                onBlur={e => { const v = Number(e.target.value) / 100; if (v !== m.comisionPorcentaje && user) { updateMetodoCobro(m.id, { comisionPorcentaje: v }); toast.success('Método actualizado') } }}
+                className="w-20 h-9 px-2 rounded-lg border border-border text-sm"
+              />
+              <span className="text-xs text-muted-foreground">→ {cajas.find(c => c.id === m.cajaId)?.nombre ?? 'sin caja'}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-border p-4">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Métodos de pago</h3>
+        <div className="space-y-3">
+          {metodosPago.map(m => {
+            // Caja Negra solo admite instrumentos INMEDIATO — no ofrecerla acá
+            // para Cheque/Cuenta corriente/Tarjeta (0022_finanzas_regla_caja_instrumento.sql).
+            const cajasCompatibles = m.tipo === 'INMEDIATO' ? cajas : cajas.filter(c => c.tipoCaja === 'BLANCA')
+            return (
+              <div key={m.id} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="font-medium min-w-32">{m.nombre}</span>
+                <span className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">{m.tipo}</span>
+                <label className="text-xs text-muted-foreground">Caja por defecto</label>
+                <select
+                  defaultValue={m.cajaId ?? ''}
+                  onChange={e => { if (user) { updateMetodoPago(m.id, { cajaId: e.target.value || null }); toast.success('Método actualizado') } }}
+                  className="h-9 px-2 rounded-lg border border-border text-sm"
+                >
+                  <option value="">Sin definir</option>
+                  {cajasCompatibles.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </>
+  )
+}
 
 const LIST_LABELS: Record<keyof typeof CONFIG_LISTS, string> = {
   CATEGORIA: 'Categorías',
@@ -46,6 +115,7 @@ export default function ConfigPage() {
   return (
     <AppShell title="Configuración" onBack={() => navigate(-1)}>
       <div className="space-y-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0">
+        <MetodosFinancierosConfig />
         {Object.entries(lists).map(([key, values]) => (
           <div key={key} className="bg-white rounded-2xl border border-border p-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">

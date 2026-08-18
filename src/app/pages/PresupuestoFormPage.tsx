@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
+import { Field } from '@/components/Field'
 import { CondicionesComercialesFields, CONDICIONES_COMERCIALES_DRAFT_VACIO, type CondicionesComercialesDraft } from '@/components/CondicionesComercialesFields'
 import { CONFIG_LISTS, validarCondicionesComerciales, presupuestoTieneVentaAsociada, type Categoria, type EstadoComercial, type CondicionPago, type TipoCaja } from '@/modules/porte'
 import { usePresupuestos, useVentas, useClientes, usePresupuestoActions } from '@/modules/porte/store'
@@ -223,14 +224,5 @@ export default function PresupuestoFormPage() {
         </button>
       </div>
     </AppShell>
-  )
-}
-
-function Field({ label, required, className = '', children }: { label: string; required?: boolean; className?: string; children: React.ReactNode }) {
-  return (
-    <div className={className}>
-      <label className="text-sm text-muted-foreground mb-1.5 block">{label}{required && <span className="text-destructive"> *</span>}</label>
-      {children}
-    </div>
   )
 }

@@ -1,8 +1,11 @@
+import { addMonths, setDate, format as formatDateFns, parseISO } from 'date-fns'
 import { MOCK_INGRESOS, type Ingreso } from './data/ingresos'
 import { MOCK_EGRESOS, type Egreso } from './data/egresos'
 import type { Venta } from './data/ventas'
 import type { Presupuesto } from './data/presupuestos'
 import type { EstadoCobro, RentabilidadRating, CondicionPago, TipoCaja } from './data/config'
+import type { MetodoCobro } from './data/metodosCobro'
+import { addDaysLocal, localDateString } from '@/lib/format'
 
 // ─── Derivados de una venta — no se guardan, se calculan en runtime ──────────
 // Aceptan `ingresos`/`egresos` opcionales para leer del store en runtime;
@@ -136,4 +139,66 @@ export function validarCondicionesComerciales(c: Partial<CondicionesComerciales>
 
 export function presupuestoTieneVentaAsociada(id: string, ventas: Venta[]): boolean {
   return ventas.some(v => v.id === id)
+}
+
+// ─── Finanzas (18/19_FINANZAS) — derivaciones puras, espejo de la SQL ──────
+// Estas dos funciones son la única lógica financiera que vive en el
+// frontend: son previews no persistidos (lo que el usuario ve mientras
+// completa el form, antes de guardar) — la fuente de verdad real para
+// caja/disponible/proyección/flujo sigue siendo Postgres (0021_finanzas_rpc.sql).
+
+export interface AcreditacionDerivada {
+  fechaAcreditacion: string
+  comision: number
+  netoEsperado: number
+  cajaId: string | null
+}
+
+/** A partir del método de cobro elegido, deriva cuándo se espera la plata y cuánto neto — nunca hardcodeado en el form. */
+export function derivarAcreditacionIngreso(
+  metodo: Pick<MetodoCobro, 'diasAcreditacion' | 'comisionPorcentaje' | 'cajaId'>,
+  fecha: string,
+  monto: number,
+): AcreditacionDerivada {
+  return {
+    fechaAcreditacion: addDaysLocal(fecha, metodo.diasAcreditacion),
+    comision: Math.round(monto * metodo.comisionPorcentaje * 100) / 100,
+    netoEsperado: Math.round(monto * (1 - metodo.comisionPorcentaje) * 100) / 100,
+    cajaId: metodo.cajaId,
+  }
+}
+
+export interface CuotaTarjeta {
+  numero: number
+  monto: number
+  fechaVencimiento: string
+  periodo: string // 'yyyy-MM', usado como clave de resumenes_tarjeta
+}
+
+/**
+ * Reparte una compra en `cuotas` vencimientos mensuales sobre el día de
+ * vencimiento de la tarjeta (la cuota N vence N meses después de la compra).
+ * La última cuota absorbe el resto del redondeo para que la suma cierre
+ * exacto con `monto`. Simplificación deliberada: no calcula a qué resumen
+ * cae la compra según `diaCierre` (cuál es "el próximo cierre") — usa
+ * siempre +1, +2, +3... meses desde la fecha de compra.
+ */
+export function calcularCuotasTarjeta(fechaCompra: string, monto: number, cuotas: number, diaVencimiento: number): CuotaTarjeta[] {
+  const base = parseISO(fechaCompra)
+  const montoCuota = Math.round((monto / cuotas) * 100) / 100
+  const resultado: CuotaTarjeta[] = []
+  let acumulado = 0
+  for (let numero = 1; numero <= cuotas; numero++) {
+    const esUltima = numero === cuotas
+    const montoEstaCuota = esUltima ? Math.round((monto - acumulado) * 100) / 100 : montoCuota
+    acumulado += montoEstaCuota
+    const fechaMes = setDate(addMonths(base, numero), Math.min(Math.max(diaVencimiento, 1), 28))
+    resultado.push({
+      numero,
+      monto: montoEstaCuota,
+      fechaVencimiento: localDateString(fechaMes),
+      periodo: formatDateFns(fechaMes, 'yyyy-MM'),
+    })
+  }
+  return resultado
 }

@@ -11,11 +11,20 @@ import type { Cliente, ClienteUpdate } from './data/clientes'
 import type { GastoFijo } from './data/gastosFijos'
 import type { Variacion } from './data/variaciones'
 import type { Aprendizaje } from './data/aprendizajes'
-import { validarPresupuestoParaVenta, construirVentaDesdePresupuesto, validarCondicionesComerciales, type CondicionesComerciales } from './calculos'
+import type { Caja } from './data/cajas'
+import type { MetodoCobro } from './data/metodosCobro'
+import type { MetodoPago } from './data/metodosPago'
+import type { Cheque } from './data/cheques'
+import type { TarjetaCredito, ResumenTarjeta } from './data/tarjetas'
+import type { CompromisoPago } from './data/compromisosPago'
+import { validarPresupuestoParaVenta, construirVentaDesdePresupuesto, validarCondicionesComerciales, calcularCuotasTarjeta, type CondicionesComerciales } from './calculos'
+import { addDaysLocal } from '@/lib/format'
 import {
   rowToIngreso, ingresoToRow, rowToEgreso, egresoToRow, rowToPresupuesto, presupuestoToRow,
   rowToVenta, ventaToRow, rowToProveedor, proveedorToRow, rowToCliente, clienteToRow, rowToGastoFijo, gastoFijoToRow,
   rowToVariacion, variacionToRow, rowToAprendizaje, aprendizajeToRow,
+  rowToCaja, cajaToRow, rowToMetodoCobro, metodoCobroToRow, rowToMetodoPago, metodoPagoToRow,
+  rowToCheque, rowToTarjeta, tarjetaToRow, rowToResumenTarjeta, rowToCompromisoPago,
 } from './mappers'
 
 // ─── Store conectado a Supabase, por entidad, vía React Query ────────────────
@@ -29,6 +38,9 @@ import {
 // Las mutaciones actualizan el cache de inmediato (misma UX optimista que
 // antes) y persisten en Supabase en paralelo; RLS es la barrera real de
 // escritura, esto es solo la capa de UI.
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Row = Record<string, any>
 
 function logPersistError(op: string, error: unknown) {
   // eslint-disable-next-line no-console
@@ -52,8 +64,12 @@ function nextSeqId(prefix: string, ids: string[]): string {
 }
 
 export type TableKey = 'ingresos' | 'egresos' | 'presupuestos' | 'ventas' | 'proveedores' | 'clientes' | 'gastosFijos' | 'variaciones' | 'aprendizajes'
+  | 'cajas' | 'metodosCobro' | 'metodosPago' | 'cheques' | 'tarjetas' | 'resumenesTarjeta' | 'compromisosPago'
 
-const ALL_TABLE_KEYS: TableKey[] = ['ingresos', 'egresos', 'presupuestos', 'ventas', 'proveedores', 'clientes', 'gastosFijos', 'variaciones', 'aprendizajes']
+const ALL_TABLE_KEYS: TableKey[] = [
+  'ingresos', 'egresos', 'presupuestos', 'ventas', 'proveedores', 'clientes', 'gastosFijos', 'variaciones', 'aprendizajes',
+  'cajas', 'metodosCobro', 'metodosPago', 'cheques', 'tarjetas', 'resumenesTarjeta', 'compromisosPago',
+]
 
 function porteKey(table: TableKey): QueryKey {
   return ['porte', table]
@@ -106,6 +122,41 @@ async function fetchAprendizajes(): Promise<Aprendizaje[]> {
   if (error) throw error
   return (data ?? []).map(rowToAprendizaje)
 }
+async function fetchCajas(): Promise<Caja[]> {
+  const { data, error } = await supabase.from('cajas').select('*').order('nombre')
+  if (error) throw error
+  return (data ?? []).map(rowToCaja)
+}
+async function fetchMetodosCobro(): Promise<MetodoCobro[]> {
+  const { data, error } = await supabase.from('metodos_cobro').select('*').order('nombre')
+  if (error) throw error
+  return (data ?? []).map(rowToMetodoCobro)
+}
+async function fetchMetodosPago(): Promise<MetodoPago[]> {
+  const { data, error } = await supabase.from('metodos_pago').select('*').order('nombre')
+  if (error) throw error
+  return (data ?? []).map(rowToMetodoPago)
+}
+async function fetchCheques(): Promise<Cheque[]> {
+  const { data, error } = await supabase.from('cheques').select('*').order('fecha_vencimiento')
+  if (error) throw error
+  return (data ?? []).map(rowToCheque)
+}
+async function fetchTarjetas(): Promise<TarjetaCredito[]> {
+  const { data, error } = await supabase.from('tarjetas_credito').select('*').order('nombre')
+  if (error) throw error
+  return (data ?? []).map(rowToTarjeta)
+}
+async function fetchResumenesTarjeta(): Promise<ResumenTarjeta[]> {
+  const { data, error } = await supabase.from('resumenes_tarjeta').select('*').order('fecha_vencimiento')
+  if (error) throw error
+  return (data ?? []).map(rowToResumenTarjeta)
+}
+async function fetchCompromisosPago(): Promise<CompromisoPago[]> {
+  const { data, error } = await supabase.from('compromisos_pago').select('*').order('fecha_vencimiento')
+  if (error) throw error
+  return (data ?? []).map(rowToCompromisoPago)
+}
 
 function useEntity<T>(table: TableKey, queryFn: () => Promise<T[]>): T[] {
   const { data } = useQuery({ queryKey: porteKey(table), queryFn })
@@ -123,6 +174,13 @@ export function useClientes(): Cliente[] { return useEntity('clientes', fetchCli
 export function useGastosFijos(): GastoFijo[] { return useEntity('gastosFijos', fetchGastosFijos) }
 export function useVariaciones(): Variacion[] { return useEntity('variaciones', fetchVariaciones) }
 export function useAprendizajes(): Aprendizaje[] { return useEntity('aprendizajes', fetchAprendizajes) }
+export function useCajas(): Caja[] { return useEntity('cajas', fetchCajas) }
+export function useMetodosCobro(): MetodoCobro[] { return useEntity('metodosCobro', fetchMetodosCobro) }
+export function useMetodosPago(): MetodoPago[] { return useEntity('metodosPago', fetchMetodosPago) }
+export function useCheques(): Cheque[] { return useEntity('cheques', fetchCheques) }
+export function useTarjetas(): TarjetaCredito[] { return useEntity('tarjetas', fetchTarjetas) }
+export function useResumenesTarjeta(): ResumenTarjeta[] { return useEntity('resumenesTarjeta', fetchResumenesTarjeta) }
+export function useCompromisosPago(): CompromisoPago[] { return useEntity('compromisosPago', fetchCompromisosPago) }
 
 /**
  * Re-lee entidades puntuales desde Supabase. Necesario después de mutaciones
@@ -140,6 +198,115 @@ export function usePorteRefetch() {
     const keys = tables && tables.length > 0 ? tables : ALL_TABLE_KEYS
     return Promise.all(keys.map(t => queryClient.invalidateQueries({ queryKey: porteKey(t) }))).then(() => undefined)
   }, [queryClient])
+}
+
+// ─── RPC financieras — Caja/Disponible/Proyección/Flujo (Postgres, no JS) ───
+// Toda la regla vive en las funciones SQL (0021_finanzas_rpc.sql); acá solo
+// se invocan y cachean por parámetros. `cajaId` opcional filtra a una caja;
+// sin él, las funciones agregan todas.
+
+export interface CajaActualRow {
+  cajaId: string; cajaNombre: string; saldoInicial: number
+  ingresosAcreditados: number; pagosDebitados: number; saldoActual: number
+}
+export interface DisponibleFinanciero {
+  cajaActual: number; cobrosConfirmadosPeriodo: number; compromisosPeriodo: number
+  gastosFijosPeriodo: number; disponibleEstimado: number
+}
+export interface ProyeccionCajaDia {
+  fecha: string; saldoInicialDia: number; ingresosConfirmados: number; ingresosEstimados: number
+  pagosComprometidos: number; saldoFinal: number; enRojo: boolean
+}
+export interface FlujoCajaMes {
+  mes: number; entradas: number; salidas: number; flujoNeto: number; saldoInicial: number; saldoFinal: number
+}
+
+export function useCajaActual(fechaCorte: string) {
+  return useQuery({
+    queryKey: ['porte', 'rpc', 'cajaActual', fechaCorte],
+    queryFn: async (): Promise<CajaActualRow[]> => {
+      const { data, error } = await supabase.rpc('get_caja_actual', { fecha_corte: fechaCorte })
+      if (error) throw error
+      return (data ?? []).map((r: Row) => ({
+        cajaId: r.caja_id, cajaNombre: r.caja_nombre, saldoInicial: Number(r.saldo_inicial),
+        ingresosAcreditados: Number(r.ingresos_acreditados), pagosDebitados: Number(r.pagos_debitados),
+        saldoActual: Number(r.saldo_actual),
+      }))
+    },
+  })
+}
+
+export function useDisponibleFinanciero(fechaDesde: string, fechaHasta: string, cajaId: string | null) {
+  return useQuery({
+    queryKey: ['porte', 'rpc', 'disponibleFinanciero', fechaDesde, fechaHasta, cajaId],
+    queryFn: async (): Promise<DisponibleFinanciero | undefined> => {
+      const { data, error } = await supabase.rpc('get_disponible_financiero', {
+        fecha_desde: fechaDesde, fecha_hasta: fechaHasta, caja_id_param: cajaId,
+      })
+      if (error) throw error
+      const r: Row | undefined = data?.[0]
+      if (!r) return undefined
+      return {
+        cajaActual: Number(r.caja_actual), cobrosConfirmadosPeriodo: Number(r.cobros_confirmados_periodo),
+        compromisosPeriodo: Number(r.compromisos_periodo), gastosFijosPeriodo: Number(r.gastos_fijos_periodo),
+        disponibleEstimado: Number(r.disponible_estimado),
+      }
+    },
+  })
+}
+
+export function useProyeccionCaja(fechaDesde: string, fechaHasta: string, cajaId: string | null) {
+  return useQuery({
+    queryKey: ['porte', 'rpc', 'proyeccionCaja', fechaDesde, fechaHasta, cajaId],
+    queryFn: async (): Promise<ProyeccionCajaDia[]> => {
+      const { data, error } = await supabase.rpc('get_proyeccion_caja', {
+        fecha_desde: fechaDesde, fecha_hasta: fechaHasta, caja_id_param: cajaId,
+      })
+      if (error) throw error
+      return (data ?? []).map((r: Row) => ({
+        fecha: r.fecha, saldoInicialDia: Number(r.saldo_inicial_dia), ingresosConfirmados: Number(r.ingresos_confirmados),
+        ingresosEstimados: Number(r.ingresos_estimados), pagosComprometidos: Number(r.pagos_comprometidos),
+        saldoFinal: Number(r.saldo_final), enRojo: r.en_rojo,
+      }))
+    },
+  })
+}
+
+/** Derivado en JS por ser una simple reducción sobre filas ya calculadas por SQL — no es una regla nueva, solo lectura del resultado de get_proyeccion_caja. */
+export interface Descalce { primeraFechaNegativa: string | null; saldoMinimo: number; montoNecesarioCobertura: number }
+export function calcularDescalce(dias: ProyeccionCajaDia[]): Descalce {
+  const negativo = dias.find(d => d.enRojo)
+  const saldoMinimo = dias.length ? Math.min(...dias.map(d => d.saldoFinal)) : 0
+  return {
+    primeraFechaNegativa: negativo?.fecha ?? null,
+    saldoMinimo,
+    montoNecesarioCobertura: saldoMinimo < 0 ? -saldoMinimo : 0,
+  }
+}
+
+export function useFlujoCaja(anio: number, cajaId: string | null) {
+  return useQuery({
+    queryKey: ['porte', 'rpc', 'flujoCaja', anio, cajaId],
+    queryFn: async (): Promise<FlujoCajaMes[]> => {
+      const { data, error } = await supabase.rpc('get_flujo_caja', { anio, caja_id_param: cajaId })
+      if (error) throw error
+      return (data ?? []).map((r: Row) => ({
+        mes: r.mes, entradas: Number(r.entradas), salidas: Number(r.salidas), flujoNeto: Number(r.flujo_neto),
+        saldoInicial: Number(r.saldo_inicial), saldoFinal: Number(r.saldo_final),
+      }))
+    },
+  })
+}
+
+export function usePendienteAcreditacion(fechaCorte: string, cajaId: string | null) {
+  return useQuery({
+    queryKey: ['porte', 'rpc', 'pendienteAcreditacion', fechaCorte, cajaId],
+    queryFn: async (): Promise<number> => {
+      const { data, error } = await supabase.rpc('get_pendiente_acreditacion', { fecha_corte: fechaCorte, caja_id_param: cajaId })
+      if (error) throw error
+      return Number(data ?? 0)
+    },
+  })
 }
 
 /**
@@ -229,7 +396,126 @@ export function useEgresoActions() {
     return current.find(e => e.activo && e.id === obraId && e.monto === monto && e.fecha === fecha)
   }
 
-  return { addEgreso, updateEgreso, removeEgreso, softDeleteEgreso, findDuplicateEgreso }
+  /**
+   * Crea el egreso y, según el método de pago elegido, el/los compromiso(s)
+   * de pago que representan cuándo esa plata sale realmente de caja — es el
+   * único lugar donde se genera un compromiso a partir de un egreso (sección
+   * 6/8/9/10/11 del pedido). A diferencia de `addEgreso`, espera confirmación
+   * real de Supabase en vez de optimista: si el egreso se guarda pero falla
+   * el compromiso, el usuario tiene que enterarse (queda un egreso sin
+   * registro financiero) en vez de ver un éxito falso.
+   */
+  const addEgresoConPago = async (
+    data: Omit<Egreso, 'ref' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt' | 'estado' | 'fechaEmision' | 'fechaAcreditacion'>,
+    pago: PagoEgresoInput,
+    userId: string,
+  ): Promise<{ ok: true; egreso: Egreso } | { ok: false; error: string }> => {
+    const metodosPago = queryClient.getQueryData<MetodoPago[]>(porteKey('metodosPago')) ?? []
+    const metodo = metodosPago.find(m => m.id === pago.metodoPagoId)
+    if (!metodo) return { ok: false, error: 'Método de pago inválido' }
+
+    const now = new Date().toISOString()
+    const current = queryClient.getQueryData<Egreso[]>(porteKey('egresos')) ?? []
+    const ref = nextRef('EG', current)
+    const cajaId = pago.cajaId ?? metodo.cajaId ?? undefined
+    const egreso: Egreso = { ...data, ref, cajaId, estado: 'Confirmado', activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+
+    const { error: egresoError } = await supabase.from('egresos')
+      .insert({ ...egresoToRow(egreso), ref, created_by: userId, created_at: now, updated_at: now })
+    if (egresoError) {
+      logPersistError('addEgresoConPago:egreso', egresoError)
+      return { ok: false, error: 'No se pudo guardar el egreso' }
+    }
+
+    try {
+      if (metodo.tipo === 'INMEDIATO') {
+        const { error } = await supabase.from('compromisos_pago').insert({
+          egreso_id: ref, monto: egreso.monto, metodo_pago_id: metodo.id,
+          fecha_vencimiento: egreso.fecha, fecha_acreditacion: egreso.fecha, caja_id: cajaId ?? null,
+          estado: 'PAGADO', created_by: userId,
+        })
+        if (error) throw error
+      } else if (metodo.tipo === 'CHEQUE') {
+        if (!pago.chequeFechaVencimiento) throw new Error('Falta la fecha de vencimiento del cheque')
+        const { data: cheque, error: chequeError } = await supabase.from('cheques').insert({
+          numero: pago.chequeNumero ?? null, banco: pago.chequeBanco ?? null, monto: egreso.monto,
+          fecha_emision: egreso.fecha, fecha_vencimiento: pago.chequeFechaVencimiento, caja_id: cajaId ?? null,
+          estado: 'EMITIDO', created_by: userId,
+        }).select('id').single()
+        if (chequeError || !cheque) throw chequeError ?? new Error('No se pudo crear el cheque')
+        const { error } = await supabase.from('compromisos_pago').insert({
+          egreso_id: ref, monto: egreso.monto, metodo_pago_id: metodo.id, fecha_vencimiento: pago.chequeFechaVencimiento,
+          caja_id: cajaId ?? null, estado: 'PENDIENTE', cheque_id: cheque.id, created_by: userId,
+        })
+        if (error) throw error
+      } else if (metodo.tipo === 'CUENTA_CORRIENTE') {
+        const proveedores = queryClient.getQueryData<Proveedor[]>(porteKey('proveedores')) ?? []
+        const proveedor = proveedores.find(p => p.idProv === data.proveedor)
+        const vencimiento = pago.fechaVencimientoCC ?? addDaysLocal(egreso.fecha, proveedor?.plazoDias ?? 30)
+        const { error } = await supabase.from('compromisos_pago').insert({
+          egreso_id: ref, monto: egreso.monto, metodo_pago_id: metodo.id, fecha_vencimiento: vencimiento,
+          caja_id: cajaId ?? null, estado: 'PENDIENTE', created_by: userId,
+        })
+        if (error) throw error
+      } else if (metodo.tipo === 'TARJETA_CREDITO') {
+        if (!pago.tarjetaId) throw new Error('Falta elegir la tarjeta')
+        const tarjetas = queryClient.getQueryData<TarjetaCredito[]>(porteKey('tarjetas')) ?? []
+        const tarjeta = tarjetas.find(t => t.id === pago.tarjetaId)
+        if (!tarjeta) throw new Error('Tarjeta inválida')
+
+        const cuotas = calcularCuotasTarjeta(egreso.fecha, egreso.monto, pago.cuotas ?? 1, tarjeta.diaVencimiento)
+        for (const cuota of cuotas) {
+          const { data: existente } = await supabase.from('resumenes_tarjeta')
+            .select('id, monto').eq('tarjeta_id', tarjeta.id).eq('periodo', cuota.periodo).maybeSingle()
+
+          let resumenId: string
+          if (existente) {
+            resumenId = existente.id
+            const { error } = await supabase.from('resumenes_tarjeta')
+              .update({ monto: Number(existente.monto) + cuota.monto, updated_at: now }).eq('id', resumenId)
+            if (error) throw error
+          } else {
+            const { data: nuevoResumen, error } = await supabase.from('resumenes_tarjeta').insert({
+              tarjeta_id: tarjeta.id, periodo: cuota.periodo, fecha_cierre: cuota.fechaVencimiento,
+              fecha_vencimiento: cuota.fechaVencimiento, monto: cuota.monto, estado: 'PENDIENTE', created_by: userId,
+            }).select('id').single()
+            if (error || !nuevoResumen) throw error ?? new Error('No se pudo crear el resumen de tarjeta')
+            resumenId = nuevoResumen.id
+          }
+
+          const { error: compromisoError } = await supabase.from('compromisos_pago').insert({
+            egreso_id: ref, monto: cuota.monto, metodo_pago_id: metodo.id, fecha_vencimiento: cuota.fechaVencimiento,
+            caja_id: cajaId ?? tarjeta.cajaDebitoId ?? null, estado: 'PENDIENTE',
+            tarjeta_id: tarjeta.id, resumen_tarjeta_id: resumenId, created_by: userId,
+          })
+          if (compromisoError) throw compromisoError
+        }
+      }
+    } catch (err) {
+      logPersistError('addEgresoConPago:compromiso', err)
+      return { ok: false, error: 'El egreso se guardó pero no se pudo generar el compromiso de pago. Revisalo en Finanzas.' }
+    }
+
+    queryClient.setQueryData<Egreso[]>(porteKey('egresos'), prev => (prev ? [egreso, ...prev] : prev))
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'compromisosPago'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'resumenesTarjeta'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] })
+    return { ok: true, egreso }
+  }
+
+  return { addEgreso, updateEgreso, removeEgreso, softDeleteEgreso, findDuplicateEgreso, addEgresoConPago }
+}
+
+export interface PagoEgresoInput {
+  metodoPagoId: string
+  cajaId?: string
+  chequeBanco?: string
+  chequeNumero?: string
+  chequeFechaVencimiento?: string
+  fechaVencimientoCC?: string
+  tarjetaId?: string
+  cuotas?: number
 }
 
 export function usePresupuestoActions() {
@@ -535,4 +821,130 @@ export function useAprendizajeActions() {
   const softDeleteAprendizaje = (idApr: string) => updateAprendizaje(idApr, { activo: false })
 
   return { addAprendizaje, updateAprendizaje, softDeleteAprendizaje }
+}
+
+// ─── Finanzas — acciones (18/19_FINANZAS) ──────────────────────────────────
+
+export function useCajaActions() {
+  const queryClient = useQueryClient()
+
+  const addCaja = (data: Omit<Caja, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): Caja => {
+    const now = new Date().toISOString()
+    const nuevo: Caja = { ...data, id: crypto.randomUUID(), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<Caja[]>(porteKey('cajas'), prev => (prev ? [...prev, nuevo] : prev))
+    supabase.from('cajas').insert({ ...cajaToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addCaja', error) })
+    return nuevo
+  }
+
+  const updateCaja = (id: string, data: Partial<Caja>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<Caja[]>(porteKey('cajas'), prev => prev?.map(c => (c.id === id ? { ...c, ...data, updatedAt: now } : c)))
+    supabase.from('cajas').update({ ...cajaToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updateCaja', error) })
+  }
+
+  return { addCaja, updateCaja }
+}
+
+export function useMetodoCobroActions() {
+  const queryClient = useQueryClient()
+
+  const addMetodoCobro = (data: Omit<MetodoCobro, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): MetodoCobro => {
+    const now = new Date().toISOString()
+    const nuevo: MetodoCobro = { ...data, id: crypto.randomUUID(), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<MetodoCobro[]>(porteKey('metodosCobro'), prev => (prev ? [...prev, nuevo] : prev))
+    supabase.from('metodos_cobro').insert({ ...metodoCobroToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addMetodoCobro', error) })
+    return nuevo
+  }
+
+  const updateMetodoCobro = (id: string, data: Partial<MetodoCobro>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<MetodoCobro[]>(porteKey('metodosCobro'), prev => prev?.map(m => (m.id === id ? { ...m, ...data, updatedAt: now } : m)))
+    supabase.from('metodos_cobro').update({ ...metodoCobroToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updateMetodoCobro', error) })
+  }
+
+  const softDeleteMetodoCobro = (id: string) => updateMetodoCobro(id, { activo: false })
+
+  return { addMetodoCobro, updateMetodoCobro, softDeleteMetodoCobro }
+}
+
+export function useMetodoPagoActions() {
+  const queryClient = useQueryClient()
+
+  const addMetodoPago = (data: Omit<MetodoPago, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): MetodoPago => {
+    const now = new Date().toISOString()
+    const nuevo: MetodoPago = { ...data, id: crypto.randomUUID(), activo: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<MetodoPago[]>(porteKey('metodosPago'), prev => (prev ? [...prev, nuevo] : prev))
+    supabase.from('metodos_pago').insert({ ...metodoPagoToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addMetodoPago', error) })
+    return nuevo
+  }
+
+  const updateMetodoPago = (id: string, data: Partial<MetodoPago>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<MetodoPago[]>(porteKey('metodosPago'), prev => prev?.map(m => (m.id === id ? { ...m, ...data, updatedAt: now } : m)))
+    supabase.from('metodos_pago').update({ ...metodoPagoToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updateMetodoPago', error) })
+  }
+
+  const softDeleteMetodoPago = (id: string) => updateMetodoPago(id, { activo: false })
+
+  return { addMetodoPago, updateMetodoPago, softDeleteMetodoPago }
+}
+
+export function useTarjetaActions() {
+  const queryClient = useQueryClient()
+
+  const addTarjeta = (data: Omit<TarjetaCredito, 'id' | 'activa' | 'createdAt' | 'createdBy' | 'updatedAt'>, userId: string): TarjetaCredito => {
+    const now = new Date().toISOString()
+    const nuevo: TarjetaCredito = { ...data, id: crypto.randomUUID(), activa: true, createdAt: now, createdBy: userId, updatedAt: now }
+    queryClient.setQueryData<TarjetaCredito[]>(porteKey('tarjetas'), prev => (prev ? [...prev, nuevo] : prev))
+    supabase.from('tarjetas_credito').insert({ ...tarjetaToRow(nuevo), created_by: userId, created_at: now, updated_at: now })
+      .then(({ error }) => { if (error) logPersistError('addTarjeta', error) })
+    return nuevo
+  }
+
+  const updateTarjeta = (id: string, data: Partial<TarjetaCredito>) => {
+    const now = new Date().toISOString()
+    queryClient.setQueryData<TarjetaCredito[]>(porteKey('tarjetas'), prev => prev?.map(t => (t.id === id ? { ...t, ...data, updatedAt: now } : t)))
+    supabase.from('tarjetas_credito').update({ ...tarjetaToRow(data), updated_at: now }).eq('id', id)
+      .then(({ error }) => { if (error) logPersistError('updateTarjeta', error) })
+  }
+
+  const softDeleteTarjeta = (id: string) => updateTarjeta(id, { activa: false })
+
+  return { addTarjeta, updateTarjeta, softDeleteTarjeta }
+}
+
+export function useCompromisoPagoActions() {
+  const queryClient = useQueryClient()
+
+  /**
+   * Única vía que mueve caja real para un compromiso pendiente (cheque
+   * debitado, cuenta corriente saldada, resumen de tarjeta pagado) — llama a
+   * fn_marcar_compromiso_pagado (0019_finanzas_cheques_tarjetas_compromisos.sql),
+   * que cascadea al cheque/resumen relacionado. No hay cache optimista acá:
+   * espera confirmación real y después invalida todo lo financiero.
+   */
+  const marcarPagado = async (compromisoId: string, fecha: string, cajaId?: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const { error } = await supabase.rpc('fn_marcar_compromiso_pagado', {
+      p_compromiso_id: compromisoId, p_fecha: fecha, p_caja_id: cajaId ?? null,
+    })
+    if (error) {
+      logPersistError('marcarPagado', error)
+      return { ok: false, error: error.message ?? 'No se pudo marcar el compromiso como pagado' }
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['porte', 'compromisosPago'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'resumenesTarjeta'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] }),
+    ])
+    return { ok: true }
+  }
+
+  return { marcarPagado }
 }

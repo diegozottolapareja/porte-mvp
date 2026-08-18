@@ -52,6 +52,13 @@ const MAIN_ITEMS: Record<string, NavItem[]> = {
   dataEntry: [{ id: 'carga',     label: 'Cargar',  icon: 'PlusCircle',      path: '/carga',      moduleId: 'carga' }],
 }
 
+// Finanzas (Caja/Proyección/Flujo) — no es una tab del Excel original: lee y
+// resume ingresos/egresos/gastos_fijos ya cargados, no es un módulo de carga
+// más. Grupo propio para no alterar el orden fijo de BUSINESS_MODULES.
+const FINANCIAL_ITEMS: NavItem[] = [
+  { id: 'finanzas', label: 'Finanzas', icon: 'Wallet', path: '/finanzas', moduleId: 'finanzas' },
+]
+
 // Accesos — comunes a ambos roles, tampoco son módulos de negocio.
 const ACCESS_ITEMS: NavItem[] = [
   { id: 'asistente',     label: 'Asistente', icon: 'Mic',  path: '/asistente',     moduleId: 'asistente' },
@@ -69,6 +76,7 @@ export function getNavGroups(role: string): NavGroup[] {
   const groups: NavGroup[] = [
     { id: 'main', label: '', items: MAIN_ITEMS[role] ?? [] },
     { id: 'modules', label: 'Módulos', items: BUSINESS_MODULES },
+    { id: 'financial', label: 'Finanzas', items: FINANCIAL_ITEMS },
     { id: 'access', label: 'Accesos', items: ACCESS_ITEMS },
   ]
   if (role === 'admin') groups.push({ id: 'admin', label: 'Administración', items: ADMIN_ITEMS })

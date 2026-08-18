@@ -23,6 +23,7 @@ import DashboardPage from './pages/DashboardPage'
 import AsistentePage from './pages/AsistentePage'
 import CargaRapidaPage from './pages/CargaRapidaPage'
 import MisRegistrosPage from './pages/MisRegistrosPage'
+import FinanzasPage from './pages/FinanzasPage'
 
 // PORTE — Presupuestos y ventas
 import PresupuestosPage from './pages/PresupuestosPage'
@@ -99,6 +100,9 @@ export default function App() {
             {/* Egresos — shared: dataEntry tiene egresos:read/write igual que admin */}
             <Route path="/egresos" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><EgresosPage /></PrivateRoute>} />
             <Route path="/egresos/nuevo" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><EgresoFormPage /></PrivateRoute>} />
+
+            {/* Finanzas — shared: caja/proyección/flujo, lectura sobre ingresos/egresos ya cargados */}
+            <Route path="/finanzas" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><FinanzasPage /></PrivateRoute>} />
 
             {/* Proveedores, gastos fijos, variaciones, aprendizajes — shared: dataEntry opera las 8 entidades */}
             <Route path="/proveedores" element={<PrivateRoute allowedRoles={['admin', 'dataEntry']}><ProveedoresPage /></PrivateRoute>} />

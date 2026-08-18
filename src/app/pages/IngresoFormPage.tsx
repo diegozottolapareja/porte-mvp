@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
+import { Field } from '@/components/Field'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { CONFIG_LISTS, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso } from '@/modules/porte'
-import { useVentas, useIngresos, useIngresoActions } from '@/modules/porte/store'
+import { CONFIG_LISTS, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso, derivarAcreditacionIngreso } from '@/modules/porte'
+import { useVentas, useIngresos, useIngresoActions, useMetodosCobro, useCajas } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
@@ -15,6 +16,8 @@ export default function IngresoFormPage() {
   const { user } = useAuth()
   const ventas = useVentas()
   const ingresos = useIngresos()
+  const metodosCobro = useMetodosCobro()
+  const cajas = useCajas()
   const { addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso } = useIngresoActions()
   const [searchParams] = useSearchParams()
   const editRef = searchParams.get('ref')
@@ -28,27 +31,51 @@ export default function IngresoFormPage() {
   const [tipoIngreso, setTipoIngreso] = useState<TipoIngreso>(editing?.tipoIngreso ?? 'ANTICIPO')
   const [concepto, setConcepto] = useState(editing?.concepto ?? '')
   const [monto, setMonto] = useState(editing?.monto.toString() ?? '')
-  const [cuenta, setCuenta] = useState<Cuenta>(editing?.cuenta ?? CONFIG_LISTS.CUENTAS[0])
   const [caja, setCaja] = useState<TipoCaja>(editing?.caja ?? 'BLANCA')
+  const [metodoCobroId, setMetodoCobroId] = useState(editing?.metodoCobroId ?? '')
   const [pendingDuplicate, setPendingDuplicate] = useState<Ingreso | null>(null)
   const [pendingLoadAnother, setPendingLoadAnother] = useState(false)
 
   const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
 
+  // Método de cobro (sección 4/22 del pedido): deriva caja destino, fecha de
+  // acreditación, comisión y neto esperado — nunca hardcodeado. Es un preview
+  // no persistido; la comisión/neto se recalculan siempre desde la config
+  // vigente del método, no se guardan como snapshot.
+  //
+  // "Método de cobro" reemplaza al viejo selector de "Cuenta": ambos listaban
+  // las mismas 4 cajas (Banco Macro/MercadoPago/Efectivo Blanco/Efectivo
+  // Negro) — tener los dos era mostrar la misma elección dos veces. El
+  // método ya trae la caja asociada (metodo.cajaId), así que no hace falta
+  // un segundo campo para elegirla de nuevo.
+  const metodoSeleccionado = metodosCobro.find(m => m.id === metodoCobroId)
+  const derivado = useMemo(() => {
+    const montoNum = Number(monto)
+    if (!metodoSeleccionado || !fecha || !Number.isFinite(montoNum) || montoNum <= 0) return undefined
+    return derivarAcreditacionIngreso(metodoSeleccionado, fecha, montoNum)
+  }, [metodoSeleccionado, fecha, monto])
+  const cajaDestino = metodoSeleccionado?.cajaId ? cajas.find(c => c.id === metodoSeleccionado.cajaId) : undefined
+
   const doSave = (loadAnother: boolean, montoNum: number) => {
     if (!user) return
 
+    const payload = {
+      fecha, id: obraId, tipoIngreso, concepto, monto: montoNum,
+      cuenta: (cajaDestino?.nombre as Cuenta | undefined) ?? CONFIG_LISTS.CUENTAS[0],
+      caja: (cajaDestino?.tipoCaja as TipoCaja | undefined) ?? caja,
+      metodoCobroId: metodoCobroId || undefined, fechaAcreditacion: derivado?.fechaAcreditacion,
+      cajaId: cajaDestino?.id ?? undefined,
+    }
+
     if (editing) {
-      updateIngreso(editing.ref, { fecha, id: obraId, tipoIngreso, concepto, monto: montoNum, cuenta, caja })
+      updateIngreso(editing.ref, payload)
       // TODO: reemplazar con api.put(`/ingresos/${editing.ref}`, { ... })
       toast.success('Ingreso actualizado')
       navigate(volverA ?? '/mis-registros')
       return
     }
 
-    const nuevo = addIngreso({
-      fecha, id: obraId, tipoIngreso, concepto, monto: montoNum, cuenta, caja, estado: 'Confirmado',
-    }, user.id)
+    const nuevo = addIngreso({ ...payload, estado: 'Confirmado' }, user.id)
     // TODO: reemplazar con api.post('/ingresos', nuevo)
 
     toast.success(`Ingreso de ${formatCurrency(nuevo.monto)} cargado en ${nuevo.id}`, {
@@ -80,20 +107,19 @@ export default function IngresoFormPage() {
   }
 
   return (
-    <AppShell title={editing ? 'Editar ingreso' : 'Nuevo ingreso'} onBack={() => navigate(-1)} narrow>
-      <div className="max-w-md mx-auto w-full space-y-4">
-        <div>
-          <label className="text-sm text-muted-foreground mb-1.5 block">Fecha</label>
+    <AppShell title={editing ? 'Editar ingreso' : 'Nuevo ingreso'} onBack={() => navigate(-1)}>
+      {/* En desktop se acomoda en 2 columnas (pantalla web); en mobile queda en
+          una sola columna, como el resto de los forms de alta (ver PresupuestoFormPage). */}
+      <div className="max-w-md mx-auto w-full space-y-4 lg:max-w-none lg:mx-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
+        <Field label="Fecha">
           <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
-        </div>
+        </Field>
 
-        <div>
-          <label className="text-sm text-muted-foreground mb-1.5 block">Venta</label>
+        <Field label="Venta">
           <SearchableSelect options={obraOptions} value={obraId} onChange={setObraId} placeholder="Buscar venta o cliente..." />
-        </div>
+        </Field>
 
-        <div>
-          <label className="text-sm text-muted-foreground mb-1.5 block">Tipo de ingreso</label>
+        <Field label="Tipo de ingreso">
           <div className="flex gap-2 flex-wrap">
             {CONFIG_LISTS.TIPO_INGRESO.map(t => (
               <button
@@ -105,49 +131,60 @@ export default function IngresoFormPage() {
               </button>
             ))}
           </div>
-        </div>
+        </Field>
 
-        <div>
-          <label className="text-sm text-muted-foreground mb-1.5 block">Concepto</label>
+        <Field label="Concepto">
           <input value={concepto} onChange={e => setConcepto(e.target.value)} placeholder="Ej: Anticipo 50%" className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
-        </div>
+        </Field>
 
-        <div>
-          <label className="text-sm text-muted-foreground mb-1.5 block">Monto</label>
+        <Field label="Monto">
           <input type="number" min="0.01" step="0.01" value={monto} onChange={e => setMonto(e.target.value)} placeholder="0" className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
-        </div>
+        </Field>
 
-        <div>
-          <label className="text-sm text-muted-foreground mb-1.5 block">Cuenta</label>
-          <div className="flex gap-2 flex-wrap">
-            {CONFIG_LISTS.CUENTAS.map(c => (
-              <button
-                key={c}
-                onClick={() => setCuenta(c)}
-                className={`px-3 py-2 rounded-xl border text-sm ${cuenta === c ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-sm text-muted-foreground mb-1.5 block">Caja</label>
+        <Field label="Caja" className="lg:col-span-2">
           <div className="flex gap-2">
             {CONFIG_LISTS.TIPO_CAJA.map(c => (
               <button
                 key={c}
                 onClick={() => setCaja(c)}
-                className={`flex-1 py-2.5 rounded-xl border text-sm ${caja === c ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
+                disabled={!!metodoCobroId}
+                className={`flex-1 py-2.5 rounded-xl border text-sm disabled:opacity-40 ${caja === c ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
               >
                 {c}
               </button>
             ))}
           </div>
-        </div>
+        </Field>
 
-        <div className="flex gap-3 pt-2">
+        <Field label="Método de cobro" className="lg:col-span-2">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setMetodoCobroId('')}
+              className={`px-3 py-2 rounded-xl border text-sm ${!metodoCobroId ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
+            >
+              Sin especificar
+            </button>
+            {metodosCobro.filter(m => m.activo).map(m => (
+              <button
+                key={m.id}
+                onClick={() => setMetodoCobroId(m.id)}
+                className={`px-3 py-2 rounded-xl border text-sm ${metodoCobroId === m.id ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
+              >
+                {m.nombre}
+              </button>
+            ))}
+          </div>
+          {derivado && cajaDestino && (
+            <div className="mt-2 p-3 rounded-xl bg-muted text-xs text-muted-foreground space-y-0.5">
+              <p>Caja destino: <span className="text-dark-graphite font-medium">{cajaDestino.nombre}</span></p>
+              <p>Fecha de acreditación: <span className="text-dark-graphite font-medium">{formatDate(derivado.fechaAcreditacion)}</span></p>
+              {derivado.comision > 0 && <p>Comisión: <span className="text-dark-graphite font-medium">{formatCurrency(derivado.comision)}</span></p>}
+              <p>Neto esperado: <span className="text-dark-graphite font-medium">{formatCurrency(derivado.netoEsperado)}</span></p>
+            </div>
+          )}
+        </Field>
+
+        <div className="flex gap-3 pt-2 lg:col-span-2">
           <button onClick={() => handleSave(true)} className="flex-1 py-4 bg-white border border-border rounded-2xl font-medium text-sm">
             Guardar y cargar otro
           </button>

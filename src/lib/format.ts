@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const currencyFormatter = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })
@@ -28,6 +28,11 @@ export function localDateString(date: Date): string {
 
 export function todayLocal(): string {
   return localDateString(new Date())
+}
+
+/** Suma (o resta, con `dias` negativo) días calendario a una fecha YYYY-MM-DD sin salir de horario local. */
+export function addDaysLocal(fecha: string, dias: number): string {
+  return localDateString(addDays(parseISO(fecha), dias))
 }
 
 /** Extrae la parte numérica de un ID tipo "PR - 0004" para poder ordenar por

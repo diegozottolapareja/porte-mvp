@@ -140,6 +140,16 @@ export default async function handler(request: Request) {
     if (refsError) throw new Error(`Error leyendo egresos: ${refsError.message}`);
     const ref = nextRef('EG', (refsExistentes ?? []).map((r) => r.ref));
 
+    // Resuelve la caja real (0018_finanzas_cajas_metodos.sql) a partir de la
+    // `cuenta` de texto para que este egreso participe de get_caja_actual —
+    // sin esto quedaría invisible en Finanzas (esa RPC no lee `egresos`
+    // directo, lee `compromisos_pago`, ver abajo).
+    let cajaId: string | null = null;
+    if (cuenta) {
+      const { data: cajaMatch } = await supabase.from('cajas').select('id').eq('nombre', cuenta).maybeSingle();
+      cajaId = cajaMatch?.id ?? null;
+    }
+
     const { data: creado, error: insertError } = await supabase
       .from('egresos')
       .insert({
@@ -152,6 +162,7 @@ export default async function handler(request: Request) {
         monto,
         cuenta: cuenta ?? null,
         caja: caja ?? null,
+        caja_id: cajaId,
         estado,
         fecha_emision: fechaEmision,
         fecha_acreditacion: fechaAcreditacion,
@@ -162,6 +173,45 @@ export default async function handler(request: Request) {
       .select('ref, fecha, tipo_egreso, id_obra, proveedor_id, categoria, monto, cuenta, caja, estado, comprobante_path')
       .single();
     if (insertError) throw new Error(`Error creando egreso: ${insertError.message}`);
+
+    // Genera el compromiso_pago del egreso (sección 6/8/9/10 del pedido) — el
+    // asistente no conoce "método de pago", así que interpreta `estado` con
+    // el mismo criterio que el backfill de 0020_finanzas_backfill_compromisos.sql:
+    // Confirmado = ya pagado, Pendiente/Incompleto = a pagar sin vencimiento
+    // real cargado, Emitido = cheque legacy pendiente de débito. Best-effort:
+    // si esto falla, el egreso ya se creó — no debe romper la respuesta al
+    // asistente, pero sí queda logueado para revisar en Finanzas.
+    try {
+      if (estado === 'Confirmado') {
+        await supabase.from('compromisos_pago').insert({
+          egreso_id: ref, monto, fecha_vencimiento: fecha, fecha_acreditacion: fecha,
+          caja_id: cajaId, estado: 'PAGADO', created_by: createdBy,
+        });
+      } else if (estado === 'Emitido') {
+        const { data: chequeCreado, error: chequeError } = await supabase
+          .from('cheques')
+          .insert({
+            numero: null, banco: null, monto,
+            fecha_emision: fechaEmision ?? fecha, fecha_vencimiento: fechaAcreditacion ?? fecha,
+            caja_id: cajaId, estado: 'EMITIDO', created_by: createdBy,
+          })
+          .select('id')
+          .single();
+        if (chequeError) throw chequeError;
+        await supabase.from('compromisos_pago').insert({
+          egreso_id: ref, monto, fecha_vencimiento: fechaAcreditacion ?? fecha,
+          caja_id: cajaId, estado: 'PENDIENTE', cheque_id: chequeCreado?.id ?? null, created_by: createdBy,
+        });
+      } else {
+        await supabase.from('compromisos_pago').insert({
+          egreso_id: ref, monto, fecha_vencimiento: fecha,
+          caja_id: cajaId, estado: 'PENDIENTE', created_by: createdBy,
+        });
+      }
+    } catch (compromisoError) {
+      // eslint-disable-next-line no-console
+      console.error('[api/egresos] no se pudo generar el compromiso_pago del egreso', ref, compromisoError);
+    }
 
     return new Response(JSON.stringify({ success: true, egreso: creado }), {
       status: 200,

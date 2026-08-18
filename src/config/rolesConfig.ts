@@ -32,6 +32,8 @@ export type Permission =
   | 'aprendizajes:read'
   | 'aprendizajes:write'
   | 'aprendizajes:delete'
+  | 'finanzas:read'
+  | 'finanzas:write'
   | 'config:read'
   | 'config:write'
 
@@ -62,8 +64,9 @@ export const rolesConfig: Record<string, RoleConfig> = {
       'gastosfijos:read', 'gastosfijos:write', 'gastosfijos:delete',
       'variaciones:read', 'variaciones:write', 'variaciones:delete',
       'aprendizajes:read', 'aprendizajes:write', 'aprendizajes:delete',
+      'finanzas:read', 'finanzas:write',
     ],
-    modules: ['asistente', 'carga', 'ventas', 'ingresos', 'egresos', 'proveedores', 'clientes', 'gastosfijos', 'variaciones', 'aprendizajes', 'profile'],
+    modules: ['asistente', 'carga', 'ventas', 'ingresos', 'egresos', 'proveedores', 'clientes', 'gastosfijos', 'variaciones', 'aprendizajes', 'finanzas', 'profile'],
     defaultRoute: '/carga',
   },
 }

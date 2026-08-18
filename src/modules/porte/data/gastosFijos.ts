@@ -17,6 +17,8 @@ export interface GastoFijo {
   periodicidad: Periodicidad
   cuenta: Cuenta
   tipoCaja: TipoCaja
+  cajaId?: string          // FK a `cajas` — reemplaza `cuenta` como fuente real para las RPC financieras
+  metodoPagoId?: string    // FK a `metodos_pago` (22_FINANZAS), opcional — habilita la regla caja Negra/Blanca vs instrumento
   proveedorId: string | null
   estado: EstadoGastoFijo
   observaciones?: string
