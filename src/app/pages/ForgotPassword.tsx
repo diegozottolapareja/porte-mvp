@@ -42,15 +42,16 @@ export default function ForgotPassword({ open, onClose }: ForgotPasswordProps) {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
           />
 
-          {/* Sheet */}
-          <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-surface-dark rounded-t-3xl p-6 border-t border-white/10"
-            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}
-          >
+          {/* Sheet on mobile (< lg), centered dialog on desktop (>= lg) */}
+          <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center pointer-events-none">
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className="w-full lg:max-w-md lg:mx-4 pointer-events-auto bg-surface-dark rounded-t-3xl lg:rounded-3xl p-6 border-t lg:border border-white/10"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}
+            >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-white">Recuperar contraseña</h2>
               <button
@@ -114,7 +115,8 @@ export default function ForgotPassword({ open, onClose }: ForgotPasswordProps) {
                 </motion.form>
               )}
             </AnimatePresence>
-          </motion.div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

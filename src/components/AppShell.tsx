@@ -174,7 +174,7 @@ export function AppShell({ title, actions, detailPanel, onBack, narrow, children
         </header>
 
         <div className="flex flex-1 overflow-hidden">
-          <main className={`flex-1 overflow-y-auto p-4 pb-24 max-w-2xl mx-auto w-full lg:mx-0 lg:py-6 lg:pb-6 lg:px-6 ${narrow ? 'lg:max-w-2xl' : 'lg:max-w-none'}`}>
+          <main className={`flex-1 overflow-y-auto p-4 pb-24 max-w-2xl mx-auto w-full lg:py-6 lg:pb-6 lg:px-6 ${narrow ? 'lg:max-w-2xl' : 'lg:mx-0 lg:max-w-none'}`}>
             {children}
           </main>
 
