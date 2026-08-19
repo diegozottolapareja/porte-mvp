@@ -9,10 +9,11 @@ import { CardActionsMenu } from '@/components/CardActionsMenu'
 import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { useEgresos, useVentas, useEgresoActions } from '@/modules/porte/store'
+import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
+import { useEgresos, useVentas, useEgresoActions, useCheques, useCompromisosPago, useCompromisoPagoActions, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
-import type { EstadoEgreso, Egreso } from '@/modules/porte'
+import { CHEQUE_ESTADO_STYLE, chequeImpactaCaja, type EstadoEgreso, type Egreso, type Cheque } from '@/modules/porte'
 
 const ESTADO_STYLE: Record<EstadoEgreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
@@ -27,13 +28,27 @@ export default function EgresosPage() {
   const { can } = useAuth()
   const egresos = useEgresos()
   const ventas = useVentas()
+  const cheques = useCheques()
+  const compromisosPago = useCompromisosPago()
   const { updateEgreso, softDeleteEgreso } = useEgresoActions()
+  const { marcarPagado } = useCompromisoPagoActions()
+  const { actualizarEstadoCheque } = useChequeActions()
   const [pendingDelete, setPendingDelete] = useState<Egreso | null>(null)
+  const [pendingCheque, setPendingCheque] = useState<{ cheque: Cheque; compromisoId: string } | null>(null)
   const activos = egresos.filter(e => e.activo)
   const puedeEditar = can('egresos:write')
   const puedeEliminar = can('egresos:delete')
 
-  const chequesFuturos = activos.filter(e => e.estado === 'Emitido' && e.fechaAcreditacion)
+  // Un egreso puede tener 1..N compromisos_pago (sección 6 del pedido) — acá
+  // solo interesa el que trae un cheque asociado, si hay alguno.
+  const chequeDeEgreso = (egreso: Egreso): { cheque: Cheque; compromisoId: string } | undefined => {
+    const compromiso = compromisosPago.find(cp => cp.egresoId === egreso.ref && cp.chequeId)
+    if (!compromiso?.chequeId) return undefined
+    const cheque = cheques.find(c => c.id === compromiso.chequeId)
+    return cheque ? { cheque, compromisoId: compromiso.id } : undefined
+  }
+
+  const chequesPendientes = cheques.filter(c => c.direccion === 'PAGO' && !chequeImpactaCaja(c.estado) && c.estado !== 'RECHAZADO' && c.estado !== 'ANULADO')
 
   return (
     <AppShell
@@ -48,12 +63,12 @@ export default function EgresosPage() {
       <div className="space-y-4">
         <MovimientosTabs active="egresos" />
 
-        {chequesFuturos.length > 0 && (
+        {chequesPendientes.length > 0 && (
           <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-start gap-3">
             <Clock3 className="w-5 h-5 text-indigo-700 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-indigo-900">{chequesFuturos.length} cheque(s) con acreditación pendiente</p>
-              <p className="text-xs text-indigo-700">Revisá las fechas de acreditación abajo.</p>
+              <p className="text-sm font-medium text-indigo-900">{chequesPendientes.length} cheque(s) todavía no debitados</p>
+              <p className="text-xs text-indigo-700">Tocá el cheque en la tarjeta del egreso para actualizar su estado.</p>
             </div>
           </div>
         )}
@@ -64,48 +79,77 @@ export default function EgresosPage() {
           emptyTitle="Sin egresos"
           emptyDescription="Todavía no se registraron pagos."
           emptyAction={{ label: 'Nuevo egreso', onClick: () => navigate('/egresos/nuevo') }}
-          renderItem={egreso => (
-            <EntityCard
-              title={egreso.tipoEgreso}
-              subtitle={`${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
-              onClick={() => navigate(egreso.id
-                ? `/ventas/${encodeURIComponent(egreso.id)}?tab=egresos&ref=${encodeURIComponent(egreso.ref)}`
-                : `/egresos/nuevo?ref=${encodeURIComponent(egreso.ref)}`
-              )}
-              statusNode={
-                puedeEditar ? (
-                  <PillSelect
-                    value={egreso.estado}
-                    options={ESTADOS_EGRESO}
-                    style={v => ESTADO_STYLE[v]}
-                    onChange={estado => updateEgreso(egreso.ref, { estado })}
-                  />
-                ) : (
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
-                    {ESTADO_STYLE[egreso.estado].label}
-                  </span>
-                )
-              }
-              fields={[
-                { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true, row: 1, rowSpan: 2, size: 'lg' },
-                { label: 'Cliente', value: egreso.id ? (ventas.find(v => v.id === egreso.id)?.cliente ?? '—') : 'Gasto fijo', align: 'right', row: 1 },
-                { label: 'Cuenta', value: egreso.cuenta, align: 'right', row: 2 },
-                ...(egreso.fechaAcreditacion ? [{ label: 'Acreditación', value: formatDate(egreso.fechaAcreditacion), align: 'right' as const, row: 3 }] : []),
-              ]}
-              actions={
-                (puedeEditar || puedeEliminar) && (
-                  <div className="flex w-full justify-end">
-                    <CardActionsMenu
-                      onEdit={puedeEditar ? () => navigate(`/egresos/nuevo?ref=${egreso.ref}`) : undefined}
-                      onDelete={puedeEliminar ? () => setPendingDelete(egreso) : undefined}
-                    />
+          renderItem={egreso => {
+            const chequeInfo = chequeDeEgreso(egreso)
+            return (
+              <EntityCard
+                title={egreso.tipoEgreso}
+                subtitle={`${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
+                onClick={() => navigate(egreso.id
+                  ? `/ventas/${encodeURIComponent(egreso.id)}?tab=egresos&ref=${encodeURIComponent(egreso.ref)}`
+                  : `/egresos/nuevo?ref=${encodeURIComponent(egreso.ref)}`
+                )}
+                statusNode={
+                  <div className="flex items-center gap-1.5">
+                    {puedeEditar ? (
+                      <PillSelect
+                        value={egreso.estado}
+                        options={ESTADOS_EGRESO}
+                        style={v => ESTADO_STYLE[v]}
+                        onChange={estado => updateEgreso(egreso.ref, { estado })}
+                      />
+                    ) : (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
+                        {ESTADO_STYLE[egreso.estado].label}
+                      </span>
+                    )}
+                    {chequeInfo && (
+                      <button
+                        onClick={e => { e.stopPropagation(); if (puedeEditar) setPendingCheque(chequeInfo) }}
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].bgColor}`}
+                      >
+                        Cheque: {CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].label}
+                      </button>
+                    )}
                   </div>
-                )
-              }
-            />
-          )}
+                }
+                fields={[
+                  { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true, row: 1, rowSpan: 2, size: 'lg' },
+                  { label: 'Cliente', value: egreso.id ? (ventas.find(v => v.id === egreso.id)?.cliente ?? '—') : 'Gasto fijo', align: 'right', row: 1 },
+                  { label: 'Cuenta', value: egreso.cuenta, align: 'right', row: 2 },
+                  ...(chequeInfo ? [{ label: 'Vto. cheque', value: formatDate(chequeInfo.cheque.fechaVencimiento), align: 'right' as const, row: 3 }] : []),
+                ]}
+                actions={
+                  (puedeEditar || puedeEliminar) && (
+                    <div className="flex w-full justify-end">
+                      <CardActionsMenu
+                        onEdit={puedeEditar ? () => navigate(`/egresos/nuevo?ref=${egreso.ref}`) : undefined}
+                        onDelete={puedeEliminar ? () => setPendingDelete(egreso) : undefined}
+                      />
+                    </div>
+                  )
+                }
+              />
+            )
+          }}
         />
       </div>
+
+      <ChequeEstadoDialog
+        cheque={pendingCheque?.cheque ?? null}
+        onClose={() => setPendingCheque(null)}
+        onConfirm={async (nuevoEstado, fecha, cajaId) => {
+          if (!pendingCheque) return
+          // DEBITADO tiene que cascadear al compromiso_pago (fn_marcar_compromiso_pagado,
+          // única vía que mueve caja real para un egreso) — el resto de las
+          // transiciones (ENTREGADO/RECHAZADO/ANULADO) no tocan el compromiso.
+          const resultado = nuevoEstado === 'DEBITADO'
+            ? await marcarPagado(pendingCheque.compromisoId, fecha, cajaId)
+            : await actualizarEstadoCheque(pendingCheque.cheque.id, nuevoEstado, fecha, cajaId)
+          if (!resultado.ok) toast.error(resultado.error)
+          else toast.success('Cheque actualizado')
+        }}
+      />
 
       <ConfirmModal
         open={!!pendingDelete}

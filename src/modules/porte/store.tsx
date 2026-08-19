@@ -14,11 +14,11 @@ import type { Aprendizaje } from './data/aprendizajes'
 import type { Caja } from './data/cajas'
 import type { MetodoCobro } from './data/metodosCobro'
 import type { MetodoPago } from './data/metodosPago'
-import type { Cheque } from './data/cheques'
+import type { Cheque, ChequeEstado } from './data/cheques'
 import type { TarjetaCredito, ResumenTarjeta } from './data/tarjetas'
 import type { CompromisoPago } from './data/compromisosPago'
 import { validarPresupuestoParaVenta, construirVentaDesdePresupuesto, validarCondicionesComerciales, calcularCuotasTarjeta, type CondicionesComerciales } from './calculos'
-import { addDaysLocal } from '@/lib/format'
+import { addDaysLocal, todayLocal } from '@/lib/format'
 import {
   rowToIngreso, ingresoToRow, rowToEgreso, egresoToRow, rowToPresupuesto, presupuestoToRow,
   rowToVenta, ventaToRow, rowToProveedor, proveedorToRow, rowToCliente, clienteToRow, rowToGastoFijo, gastoFijoToRow,
@@ -361,7 +361,52 @@ export function useIngresoActions() {
     return current.find(i => i.activo && i.id === obraId && i.monto === monto && i.fecha === fecha)
   }
 
-  return { addIngreso, updateIngreso, removeIngreso, softDeleteIngreso, findDuplicateIngreso }
+  /**
+   * Ingreso cobrado con cheque (sección "Ingresos con cheque" del pedido):
+   * reutiliza la misma entidad `cheques` que Egresos, con `direccion='COBRO'`
+   * y arranca en 'EN_CARTERA' — nunca 'ACREDITADO' desde que se carga, así
+   * que `fechaAcreditacion` queda sin definir hasta que el cheque se marca
+   * ACREDITADO (ver `useChequeActions.actualizarEstadoCheque`, que cascadea
+   * la fecha real acá). No optimista, como `addEgresoConPago`: si el cheque
+   * se crea pero el ingreso falla, el usuario tiene que enterarse.
+   */
+  const addIngresoConCheque = async (
+    data: Omit<Ingreso, 'ref' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt' | 'estado' | 'fechaAcreditacion' | 'chequeId'>,
+    cheque: { banco?: string; numero?: string; fechaVencimiento: string },
+    userId: string,
+  ): Promise<{ ok: true; ingreso: Ingreso } | { ok: false; error: string }> => {
+    const now = new Date().toISOString()
+    const current = queryClient.getQueryData<Ingreso[]>(porteKey('ingresos')) ?? []
+    const ref = nextRef('IN', current)
+
+    const { data: chequeRow, error: chequeError } = await supabase.from('cheques').insert({
+      direccion: 'COBRO', numero: cheque.numero ?? null, banco: cheque.banco ?? null, monto: data.monto,
+      fecha_emision: data.fecha, fecha_vencimiento: cheque.fechaVencimiento, caja_id: data.cajaId ?? null,
+      estado: 'EN_CARTERA', created_by: userId,
+    }).select('id').single()
+    if (chequeError || !chequeRow) {
+      logPersistError('addIngresoConCheque:cheque', chequeError)
+      return { ok: false, error: 'No se pudo registrar el cheque' }
+    }
+
+    const nuevo: Ingreso = {
+      ...data, ref, estado: 'Confirmado', chequeId: chequeRow.id,
+      activo: true, createdAt: now, createdBy: userId, updatedAt: now,
+    }
+    const { error: ingresoError } = await supabase.from('ingresos')
+      .insert({ ...ingresoToRow(nuevo), ref, created_by: userId, created_at: now, updated_at: now })
+    if (ingresoError) {
+      logPersistError('addIngresoConCheque:ingreso', ingresoError)
+      return { ok: false, error: 'El cheque se registró pero no se pudo guardar el ingreso. Revisalo en Finanzas.' }
+    }
+
+    queryClient.setQueryData<Ingreso[]>(porteKey('ingresos'), prev => (prev ? [nuevo, ...prev] : prev))
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] })
+    return { ok: true, ingreso: nuevo }
+  }
+
+  return { addIngreso, updateIngreso, removeIngreso, softDeleteIngreso, findDuplicateIngreso, addIngresoConCheque }
 }
 
 export function useEgresoActions() {
@@ -438,7 +483,7 @@ export function useEgresoActions() {
       } else if (metodo.tipo === 'CHEQUE') {
         if (!pago.chequeFechaVencimiento) throw new Error('Falta la fecha de vencimiento del cheque')
         const { data: cheque, error: chequeError } = await supabase.from('cheques').insert({
-          numero: pago.chequeNumero ?? null, banco: pago.chequeBanco ?? null, monto: egreso.monto,
+          direccion: 'PAGO', numero: pago.chequeNumero ?? null, banco: pago.chequeBanco ?? null, monto: egreso.monto,
           fecha_emision: egreso.fecha, fecha_vencimiento: pago.chequeFechaVencimiento, caja_id: cajaId ?? null,
           estado: 'EMITIDO', created_by: userId,
         }).select('id').single()
@@ -770,7 +815,57 @@ export function useGastoFijoActions() {
 
   const softDeleteGastoFijo = (id: string) => updateGastoFijo(id, { activo: false })
 
-  return { addGastoFijo, updateGastoFijo, softDeleteGastoFijo }
+  /**
+   * Gasto fijo pagado con cheque (sección "Gastos Fijos con cheque" del
+   * pedido): misma entidad `cheques`, `direccion='PAGO'`, arranca 'EMITIDO'
+   * — igual que un egreso pagado con cheque. `fecha` sigue siendo el
+   * vencimiento de la obligación; `fechaPagoEfectivo` (la salida real de
+   * caja) queda sin definir hasta que el cheque se marca DEBITADO (ver
+   * `useChequeActions.actualizarEstadoCheque`). Sirve tanto para alta como
+   * edición (`existingId`) — no optimista, mismo criterio que
+   * `addEgresoConPago`/`addIngresoConCheque`.
+   */
+  const guardarGastoFijoConCheque = async (
+    data: Omit<GastoFijo, 'id' | 'activo' | 'createdAt' | 'createdBy' | 'updatedAt' | 'chequeId' | 'fechaPagoEfectivo'>,
+    cheque: { banco?: string; numero?: string; fechaVencimiento: string },
+    userId: string,
+    existingId?: string,
+  ): Promise<{ ok: true; gastoFijo: GastoFijo } | { ok: false; error: string }> => {
+    const now = new Date().toISOString()
+
+    const { data: chequeRow, error: chequeError } = await supabase.from('cheques').insert({
+      direccion: 'PAGO', numero: cheque.numero ?? null, banco: cheque.banco ?? null, monto: data.montoPrevisto,
+      fecha_emision: todayLocal(), fecha_vencimiento: cheque.fechaVencimiento, caja_id: data.cajaId ?? null,
+      estado: 'EMITIDO', created_by: userId,
+    }).select('id').single()
+    if (chequeError || !chequeRow) {
+      logPersistError('guardarGastoFijoConCheque:cheque', chequeError)
+      return { ok: false, error: 'No se pudo registrar el cheque' }
+    }
+
+    const id = existingId ?? crypto.randomUUID()
+    const gastoFijo: GastoFijo = {
+      ...data, id, chequeId: chequeRow.id, fechaPagoEfectivo: null,
+      activo: true, createdAt: now, createdBy: userId, updatedAt: now,
+    }
+    const { error } = existingId
+      ? await supabase.from('gastos_fijos').update({ ...gastoFijoToRow(gastoFijo), updated_at: now }).eq('id', existingId)
+      : await supabase.from('gastos_fijos').insert({ ...gastoFijoToRow(gastoFijo), created_by: userId, created_at: now, updated_at: now })
+    if (error) {
+      logPersistError('guardarGastoFijoConCheque:gastoFijo', error)
+      return { ok: false, error: 'El cheque se registró pero no se pudo guardar el gasto fijo. Revisalo en Finanzas.' }
+    }
+
+    queryClient.setQueryData<GastoFijo[]>(porteKey('gastosFijos'), prev => {
+      if (!prev) return prev
+      return existingId ? prev.map(g => (g.id === existingId ? gastoFijo : g)) : [gastoFijo, ...prev]
+    })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] })
+    return { ok: true, gastoFijo }
+  }
+
+  return { addGastoFijo, updateGastoFijo, softDeleteGastoFijo, guardarGastoFijoConCheque }
 }
 
 export function useVariacionActions() {
@@ -947,4 +1042,38 @@ export function useCompromisoPagoActions() {
   }
 
   return { marcarPagado }
+}
+
+/**
+ * Avanza el estado de un cheque de Ingreso o Gasto Fijo (llama a
+ * fn_marcar_cheque_estado, 0024_finanzas_cheques_centralizados.sql) —
+ * reutilizada por igual desde IngresosPage y GastosFijosPage a través del
+ * diálogo genérico de cheque. Egresos sigue con `marcarPagado` de
+ * `useCompromisoPagoActions` sin cambios: un cheque de egreso se enlaza vía
+ * compromisos_pago, no directo, así que su cascada de caja vive en
+ * fn_marcar_compromiso_pagado, no acá.
+ */
+export function useChequeActions() {
+  const queryClient = useQueryClient()
+
+  const actualizarEstadoCheque = async (
+    chequeId: string, nuevoEstado: ChequeEstado, fecha: string, cajaId?: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const { error } = await supabase.rpc('fn_marcar_cheque_estado', {
+      p_cheque_id: chequeId, p_nuevo_estado: nuevoEstado, p_fecha: fecha, p_caja_id: cajaId ?? null,
+    })
+    if (error) {
+      logPersistError('actualizarEstadoCheque', error)
+      return { ok: false, error: error.message ?? 'No se pudo actualizar el estado del cheque' }
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'ingresos'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'gastosFijos'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] }),
+    ])
+    return { ok: true }
+  }
+
+  return { actualizarEstadoCheque }
 }

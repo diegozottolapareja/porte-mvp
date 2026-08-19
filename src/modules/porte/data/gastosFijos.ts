@@ -19,6 +19,8 @@ export interface GastoFijo {
   tipoCaja: TipoCaja
   cajaId?: string          // FK a `cajas` — reemplaza `cuenta` como fuente real para las RPC financieras
   metodoPagoId?: string    // FK a `metodos_pago` (22_FINANZAS), opcional — habilita la regla caja Negra/Blanca vs instrumento
+  chequeId?: string        // FK a `cheques` (direccion='PAGO') — solo cuando metodoPago.tipo==='CHEQUE'
+  fechaPagoEfectivo?: string | null // fecha real de salida de caja — distinta de `fecha` (vencimiento de la obligación), nunca se asume que son la misma cuando se paga con cheque
   proveedorId: string | null
   estado: EstadoGastoFijo
   observaciones?: string

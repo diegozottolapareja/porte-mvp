@@ -18,7 +18,7 @@ export default function IngresoFormPage() {
   const ingresos = useIngresos()
   const metodosCobro = useMetodosCobro()
   const cajas = useCajas()
-  const { addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso } = useIngresoActions()
+  const { addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso, addIngresoConCheque } = useIngresoActions()
   const [searchParams] = useSearchParams()
   const editRef = searchParams.get('ref')
   const obraIdParam = searchParams.get('obraId')
@@ -33,8 +33,16 @@ export default function IngresoFormPage() {
   const [monto, setMonto] = useState(editing?.monto.toString() ?? '')
   const [caja, setCaja] = useState<TipoCaja>(editing?.caja ?? 'BLANCA')
   const [metodoCobroId, setMetodoCobroId] = useState(editing?.metodoCobroId ?? '')
+  // Cheque como medio de cobro (sección "Ingresos con cheque" del pedido):
+  // solo para ingresos nuevos, mismo criterio que el bloque CHEQUE de
+  // EgresoFormPage — editar un ingreso ya cargado con cheque no reabre estos
+  // campos, el estado del cheque se avanza desde IngresosPage.
+  const [chequeBanco, setChequeBanco] = useState('')
+  const [chequeNumero, setChequeNumero] = useState('')
+  const [chequeFechaVencimiento, setChequeFechaVencimiento] = useState('')
   const [pendingDuplicate, setPendingDuplicate] = useState<Ingreso | null>(null)
   const [pendingLoadAnother, setPendingLoadAnother] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const obraOptions = ventas.map(v => ({ value: v.id, label: v.id, sublabel: v.cliente }))
 
@@ -49,33 +57,65 @@ export default function IngresoFormPage() {
   // método ya trae la caja asociada (metodo.cajaId), así que no hace falta
   // un segundo campo para elegirla de nuevo.
   const metodoSeleccionado = metodosCobro.find(m => m.id === metodoCobroId)
+  const esCheque = !editing && metodoSeleccionado?.tipo === 'CHEQUE'
+  // Un cheque no se acredita a un plazo fijo (dias_acreditacion) — la fecha
+  // real depende de cuándo se marque ACREDITADO (ver ChequeEstadoDialog en
+  // IngresosPage), así que acá no hay derivado que mostrar ni guardar.
   const derivado = useMemo(() => {
     const montoNum = Number(monto)
-    if (!metodoSeleccionado || !fecha || !Number.isFinite(montoNum) || montoNum <= 0) return undefined
+    if (!metodoSeleccionado || esCheque || !fecha || !Number.isFinite(montoNum) || montoNum <= 0) return undefined
     return derivarAcreditacionIngreso(metodoSeleccionado, fecha, montoNum)
-  }, [metodoSeleccionado, fecha, monto])
+  }, [metodoSeleccionado, esCheque, fecha, monto])
   const cajaDestino = metodoSeleccionado?.cajaId ? cajas.find(c => c.id === metodoSeleccionado.cajaId) : undefined
 
-  const doSave = (loadAnother: boolean, montoNum: number) => {
-    if (!user) return
-
-    const payload = {
+  const doSaveEditing = (montoNum: number) => {
+    if (!user || !editing) return
+    updateIngreso(editing.ref, {
       fecha, id: obraId, tipoIngreso, concepto, monto: montoNum,
       cuenta: (cajaDestino?.nombre as Cuenta | undefined) ?? CONFIG_LISTS.CUENTAS[0],
       caja: (cajaDestino?.tipoCaja as TipoCaja | undefined) ?? caja,
-      metodoCobroId: metodoCobroId || undefined, fechaAcreditacion: derivado?.fechaAcreditacion,
+      cajaId: cajaDestino?.id ?? undefined,
+      // Un ingreso ya cargado con cheque mantiene su fechaAcreditacion/chequeId
+      // tal cual — se actualizan solo desde el flujo de estado del cheque,
+      // nunca reescribiéndolos acá.
+      ...(editing.chequeId ? {} : { metodoCobroId: metodoCobroId || undefined, fechaAcreditacion: derivado?.fechaAcreditacion }),
+    })
+    // TODO: reemplazar con api.put(`/ingresos/${editing.ref}`, { ... })
+    toast.success('Ingreso actualizado')
+    navigate(volverA ?? '/mis-registros')
+  }
+
+  const doSaveNuevo = async (loadAnother: boolean, montoNum: number) => {
+    if (!user) return
+
+    const basePayload = {
+      fecha, id: obraId, tipoIngreso, concepto, monto: montoNum,
+      cuenta: (cajaDestino?.nombre as Cuenta | undefined) ?? CONFIG_LISTS.CUENTAS[0],
+      caja: (cajaDestino?.tipoCaja as TipoCaja | undefined) ?? caja,
       cajaId: cajaDestino?.id ?? undefined,
     }
 
-    if (editing) {
-      updateIngreso(editing.ref, payload)
-      // TODO: reemplazar con api.put(`/ingresos/${editing.ref}`, { ... })
-      toast.success('Ingreso actualizado')
-      navigate(volverA ?? '/mis-registros')
+    if (esCheque) {
+      setSaving(true)
+      const resultado = await addIngresoConCheque(
+        { ...basePayload, metodoCobroId: metodoCobroId || undefined },
+        { banco: chequeBanco || undefined, numero: chequeNumero || undefined, fechaVencimiento: chequeFechaVencimiento },
+        user.id,
+      )
+      setSaving(false)
+      if (!resultado.ok) {
+        toast.error(resultado.error)
+        return
+      }
+      toast.success(`Ingreso de ${formatCurrency(resultado.ingreso.monto)} cargado en ${resultado.ingreso.id}`, { duration: 5000 })
+      if (loadAnother) { setConcepto(''); setMonto('') } else navigate(volverA ?? '/carga')
       return
     }
 
-    const nuevo = addIngreso({ ...payload, estado: 'Confirmado' }, user.id)
+    const nuevo = addIngreso({
+      ...basePayload, metodoCobroId: metodoCobroId || undefined, fechaAcreditacion: derivado?.fechaAcreditacion,
+      estado: 'Confirmado',
+    }, user.id)
     // TODO: reemplazar con api.post('/ingresos', nuevo)
 
     toast.success(`Ingreso de ${formatCurrency(nuevo.monto)} cargado en ${nuevo.id}`, {
@@ -97,13 +137,18 @@ export default function IngresoFormPage() {
       toast.error(!obraId ? 'Completá la venta' : 'El monto debe ser mayor a cero')
       return
     }
+    if (esCheque && !chequeFechaVencimiento) {
+      toast.error('Completá la fecha de vencimiento del cheque')
+      return
+    }
     const duplicado = findDuplicateIngreso(obraId, montoNum, fecha)
     if (duplicado && duplicado.ref !== editRef) {
       setPendingDuplicate(duplicado)
       setPendingLoadAnother(loadAnother)
       return
     }
-    doSave(loadAnother, montoNum)
+    if (editing) doSaveEditing(montoNum)
+    else void doSaveNuevo(loadAnother, montoNum)
   }
 
   return (
@@ -168,7 +213,8 @@ export default function IngresoFormPage() {
               <button
                 key={m.id}
                 onClick={() => setMetodoCobroId(m.id)}
-                className={`px-3 py-2 rounded-xl border text-sm ${metodoCobroId === m.id ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
+                disabled={!!editing}
+                className={`px-3 py-2 rounded-xl border text-sm disabled:opacity-40 ${metodoCobroId === m.id ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
               >
                 {m.nombre}
               </button>
@@ -182,13 +228,33 @@ export default function IngresoFormPage() {
               <p>Neto esperado: <span className="text-dark-graphite font-medium">{formatCurrency(derivado.netoEsperado)}</span></p>
             </div>
           )}
+
+          {esCheque && (
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <p className="col-span-2 text-xs text-muted-foreground">
+                El ingreso queda registrado hoy, pero no suma a caja líquida hasta que el cheque se marque Acreditado (desde la lista de Ingresos).
+              </p>
+              <div className="col-span-2">
+                <label className="text-sm text-muted-foreground mb-1.5 block">Banco</label>
+                <input value={chequeBanco} onChange={e => setChequeBanco(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground mb-1.5 block">Número</label>
+                <input value={chequeNumero} onChange={e => setChequeNumero(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+              </div>
+              <div>
+                <label className="text-sm text-muted-foreground mb-1.5 block">Fecha vencimiento</label>
+                <input type="date" value={chequeFechaVencimiento} onChange={e => setChequeFechaVencimiento(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+              </div>
+            </div>
+          )}
         </Field>
 
         <div className="flex gap-3 pt-2 lg:col-span-2">
-          <button onClick={() => handleSave(true)} className="flex-1 py-4 bg-white border border-border rounded-2xl font-medium text-sm">
+          <button onClick={() => handleSave(true)} disabled={saving} className="flex-1 py-4 bg-white border border-border rounded-2xl font-medium text-sm disabled:opacity-50">
             Guardar y cargar otro
           </button>
-          <button onClick={() => handleSave(false)} className="flex-1 py-4 bg-primary text-white rounded-2xl font-semibold text-sm">
+          <button onClick={() => handleSave(false)} disabled={saving} className="flex-1 py-4 bg-primary text-white rounded-2xl font-semibold text-sm disabled:opacity-50">
             Guardar
           </button>
         </div>
@@ -203,7 +269,9 @@ export default function IngresoFormPage() {
         onConfirm={() => {
           setPendingDuplicate(null)
           const montoNum = toPositiveAmount(monto)
-          if (montoNum) doSave(pendingLoadAnother, montoNum)
+          if (!montoNum) return
+          if (editing) doSaveEditing(montoNum)
+          else void doSaveNuevo(pendingLoadAnother, montoNum)
         }}
       />
     </AppShell>

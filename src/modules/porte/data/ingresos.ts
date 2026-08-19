@@ -17,6 +17,7 @@ export interface Ingreso {
   cajaId?: string           // FK a `cajas` — reemplaza `cuenta` como fuente real para las RPC financieras
   metodoCobroId?: string    // FK a `metodos_cobro` — deriva cajaId/fechaAcreditacion/comisión
   fechaAcreditacion?: string // cuándo se espera (o ya se acreditó) la plata en caja — distinto de `fecha` (operación)
+  chequeId?: string         // FK a `cheques` (direccion='COBRO') — solo cuando metodoCobro.tipo==='CHEQUE'; fechaAcreditacion queda null hasta que el cheque se marca ACREDITADO
   activo: boolean
   createdAt: string
   createdBy: string

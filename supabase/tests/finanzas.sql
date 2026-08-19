@@ -33,6 +33,13 @@ declare
   v_cuotas_distintas int;
   v_primera_fecha_negativa date;
   v_saldo_negativo numeric;
+  v_cheque_cobro_id uuid;
+  v_cheque_pago_id uuid;
+  v_ingreso_fecha_acred date;
+  v_gasto_fijo_id uuid;
+  v_pagos_gf_antes numeric;
+  v_pagos_gf_despues numeric;
+  v_pendiente_cheque numeric;
 begin
   -- ─── setup ──────────────────────────────────────────────────────────────
   insert into cajas (nombre, tipo_caja, saldo_inicial) values ('TEST-CAJA', 'BLANCA', 0) returning id into v_caja_id;
@@ -216,10 +223,68 @@ begin
   end if;
   raise notice 'OK 10) descalce: primera fecha negativa = % (saldo %, cobertura necesaria %)', v_primera_fecha_negativa, v_saldo_negativo, -v_saldo_negativo;
 
+  -- ═══ 11) Ingreso con cheque: en cartera no cobra, acreditado sí ══════════
+  insert into cheques (direccion, monto, fecha_emision, fecha_vencimiento, caja_id, estado)
+    values ('COBRO', 5000, v_hoy, v_hoy + 20, v_caja_id, 'EN_CARTERA') returning id into v_cheque_cobro_id;
+  insert into ingresos (ref, fecha, tipo_ingreso, id_obra, monto, caja_id, metodo_cobro_id, cheque_id, estado)
+    values ('TEST-IN-11', v_hoy, 'ANTICIPO', v_venta_id, 5000, v_caja_id, v_metodo_cobro_id, v_cheque_cobro_id, 'Confirmado');
+
+  select ingresos_acreditados into v_pagos_antes from get_caja_actual(v_hoy) where caja_id = v_caja_id;
+  select get_pendiente_acreditacion(v_hoy, v_caja_id) into v_pendiente_cheque;
+  if v_pendiente_cheque < 5000 then
+    raise exception 'FALLÓ ingreso con cheque: debería aparecer en pendiente de acreditación (vencimiento del cheque), pendiente=%', v_pendiente_cheque;
+  end if;
+
+  perform fn_marcar_cheque_estado(v_cheque_cobro_id, 'DEPOSITADO', v_hoy + 2, v_caja_id);
+  select ingresos_acreditados into v_pagos_despues from get_caja_actual(v_hoy + 2) where caja_id = v_caja_id;
+  if v_pagos_despues <> v_pagos_antes then
+    raise exception 'FALLÓ ingreso con cheque: DEPOSITADO todavía no debería impactar caja líquida, ingresos_acreditados=%', v_pagos_despues;
+  end if;
+
+  perform fn_marcar_cheque_estado(v_cheque_cobro_id, 'ACREDITADO', v_hoy + 3, v_caja_id);
+  select fecha_acreditacion into v_ingreso_fecha_acred from ingresos where ref = 'TEST-IN-11';
+  if v_ingreso_fecha_acred <> v_hoy + 3 then
+    raise exception 'FALLÓ ingreso con cheque: fecha_acreditacion debería quedar en %, quedó %', v_hoy + 3, v_ingreso_fecha_acred;
+  end if;
+  select ingresos_acreditados into v_pagos_despues from get_caja_actual(v_hoy + 3) where caja_id = v_caja_id;
+  if v_pagos_despues < v_pagos_antes + 5000 then
+    raise exception 'FALLÓ ingreso con cheque: ACREDITADO debería sumar a caja líquida en su fecha real, ingresos_acreditados=%', v_pagos_despues;
+  end if;
+  raise notice 'OK 11) ingreso con cheque: no cobra hasta ACREDITADO, aparece proyectado antes en pendiente de acreditación';
+
+  -- ═══ 12) Gasto fijo con cheque: vencimiento ≠ fecha de salida de caja ════
+  select pagos_debitados into v_pagos_gf_antes from get_caja_actual(v_hoy + 5) where caja_id = v_caja_id;
+
+  insert into cheques (direccion, monto, fecha_emision, fecha_vencimiento, caja_id, estado)
+    values ('PAGO', 8000, v_hoy, v_hoy + 25, v_caja_id, 'EMITIDO') returning id into v_cheque_pago_id;
+  insert into gastos_fijos (fecha, concepto, categoria, monto_previsto, periodicidad, caja_id, metodo_pago_id, cheque_id, estado, activo)
+    values (v_hoy + 5, 'TEST Alquiler con cheque', 'Alquiler', 8000, 'Mensual', v_caja_id,
+      (select id from metodos_pago where tipo = 'CHEQUE' limit 1), v_cheque_pago_id, 'PAGADO', true)
+    returning id into v_gasto_fijo_id;
+
+  select pagos_debitados into v_pagos_gf_despues from get_caja_actual(v_hoy + 5) where caja_id = v_caja_id;
+  if v_pagos_gf_despues <> v_pagos_gf_antes then
+    raise exception 'FALLÓ gasto fijo con cheque: no debería bajar caja en el vencimiento (%) mientras el cheque no se debita, pagos_debitados=%', v_hoy + 5, v_pagos_gf_despues;
+  end if;
+
+  select pagos_comprometidos into v_pagos_comprometidos from get_proyeccion_caja(v_hoy, v_hoy + 25, v_caja_id) where fecha = v_hoy + 25;
+  if v_pagos_comprometidos < 8000 then
+    raise exception 'FALLÓ gasto fijo con cheque: debería proyectarse a la fecha de vencimiento del cheque (%), pagos_comprometidos=%', v_hoy + 25, v_pagos_comprometidos;
+  end if;
+
+  perform fn_marcar_cheque_estado(v_cheque_pago_id, 'ENTREGADO', v_hoy + 6, v_caja_id);
+  perform fn_marcar_cheque_estado(v_cheque_pago_id, 'DEBITADO', v_hoy + 25, v_caja_id);
+
+  select pagos_debitados into v_pagos_gf_despues from get_caja_actual(v_hoy + 25) where caja_id = v_caja_id;
+  if v_pagos_gf_despues < v_pagos_gf_antes + 8000 then
+    raise exception 'FALLÓ gasto fijo con cheque: DEBITADO debería bajar caja real en la fecha de débito (%), pagos_debitados=%', v_hoy + 25, v_pagos_gf_despues;
+  end if;
+  raise notice 'OK 12) gasto fijo con cheque: vencimiento de la obligación (%) ≠ fecha real de salida de caja (%)', v_hoy + 5, v_hoy + 25;
+
   raise notice '════════════════════════════════════════════════════';
-  raise notice 'TODOS LOS TESTS PASARON (10/10)';
+  raise notice 'TODOS LOS TESTS PASARON (12/12)';
 end $$;
 
-select 'TODOS LOS TESTS PASARON (10/10)' as resultado;
+select 'TODOS LOS TESTS PASARON (12/12)' as resultado;
 
 rollback;

@@ -11,8 +11,9 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/app/components/ui/dialog'
 import { Button } from '@/app/components/ui/button'
 import { PillSelect } from '@/components/PillSelect'
-import { calcDiferencia, CONFIG_LISTS, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja } from '@/modules/porte'
-import { useGastosFijos, useGastoFijoActions, useCajas, useMetodosPago } from '@/modules/porte/store'
+import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
+import { calcDiferencia, CONFIG_LISTS, CHEQUE_ESTADO_STYLE, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja, type Cheque } from '@/modules/porte'
+import { useGastosFijos, useGastoFijoActions, useCajas, useMetodosPago, useCheques, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { isNegativeAmount } from '@/lib/validation'
@@ -30,9 +31,12 @@ export default function GastosFijosPage() {
   const navigate = useNavigate()
   const { can } = useAuth()
   const gastosFijos = useGastosFijos()
+  const cheques = useCheques()
   const { updateGastoFijo, softDeleteGastoFijo } = useGastoFijoActions()
+  const { actualizarEstadoCheque } = useChequeActions()
   const [editing, setEditing] = useState<GastoFijo | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<GastoFijo | null>(null)
+  const [pendingCheque, setPendingCheque] = useState<Cheque | null>(null)
   const puedeEditar = can('gastosfijos:write')
   const puedeEliminar = can('gastosfijos:delete')
 
@@ -57,26 +61,38 @@ export default function GastosFijosPage() {
         emptyAction={can('gastosfijos:write') ? { label: 'Nuevo gasto fijo', onClick: () => setEditing('nuevo') } : undefined}
         renderItem={g => {
           const diferencia = calcDiferencia(g)
+          const cheque = g.chequeId ? cheques.find(c => c.id === g.chequeId) : undefined
           return (
             <EntityCard
               title={g.concepto}
               subtitle={`${g.categoria} · ${g.periodicidad} · ${formatDate(g.fecha)}`}
               statusNode={
-                puedeEditar ? (
-                  <PillSelect
-                    value={g.estado}
-                    options={ESTADOS}
-                    style={v => ESTADO_STYLE[v]}
-                    onChange={estado => updateGastoFijo(g.id, { estado })}
-                  />
-                ) : (
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>
-                )
+                <div className="flex items-center gap-1.5">
+                  {puedeEditar ? (
+                    <PillSelect
+                      value={g.estado}
+                      options={ESTADOS}
+                      style={v => ESTADO_STYLE[v]}
+                      onChange={estado => updateGastoFijo(g.id, { estado })}
+                    />
+                  ) : (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>
+                  )}
+                  {cheque && (
+                    <button
+                      onClick={e => { e.stopPropagation(); if (puedeEditar) setPendingCheque(cheque) }}
+                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[cheque.estado].color} ${CHEQUE_ESTADO_STYLE[cheque.estado].bgColor}`}
+                    >
+                      Cheque: {CHEQUE_ESTADO_STYLE[cheque.estado].label}
+                    </button>
+                  )}
+                </div>
               }
               fields={[
                 { label: 'Previsto', value: formatCurrency(g.montoPrevisto), row: 1 },
                 { label: 'Real', value: g.montoReal === null ? '—' : formatCurrency(g.montoReal), align: 'right', row: 1 },
                 { label: 'Diferencia', value: diferencia === null ? '—' : formatCurrency(diferencia), row: 2, tone: diferencia === null ? undefined : diferencia > 0 ? 'negative' : 'positive' },
+                ...(cheque ? [{ label: 'Vto. cheque', value: formatDate(cheque.fechaVencimiento), align: 'right' as const, row: 3 }] : []),
               ]}
               actions={
                 (puedeEditar || puedeEliminar) && (
@@ -99,6 +115,17 @@ export default function GastosFijosPage() {
         onClose={() => setEditing(null)}
       />
 
+      <ChequeEstadoDialog
+        cheque={pendingCheque}
+        onClose={() => setPendingCheque(null)}
+        onConfirm={async (nuevoEstado, fecha, cajaId) => {
+          if (!pendingCheque) return
+          const resultado = await actualizarEstadoCheque(pendingCheque.id, nuevoEstado, fecha, cajaId)
+          if (!resultado.ok) toast.error(resultado.error)
+          else toast.success('Cheque actualizado')
+        }}
+      />
+
       <ConfirmModal
         open={!!pendingDelete}
         onOpenChange={open => !open && setPendingDelete(null)}
@@ -118,7 +145,7 @@ export default function GastosFijosPage() {
 
 function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null; onClose: () => void }) {
   const { user } = useAuth()
-  const { addGastoFijo, updateGastoFijo } = useGastoFijoActions()
+  const { addGastoFijo, updateGastoFijo, guardarGastoFijoConCheque } = useGastoFijoActions()
   const cajas = useCajas()
   const metodosPago = useMetodosPago()
   const existing = value && value !== 'nuevo' ? value : undefined
@@ -138,11 +165,21 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
   const [metodoPagoId, setMetodoPagoId] = useState(existing?.metodoPagoId ?? '')
   const [estado, setEstado] = useState<EstadoGastoFijo>(existing?.estado ?? 'PREVISTO')
   const [observaciones, setObservaciones] = useState(existing?.observaciones ?? '')
+  // Cheque como medio de pago (sección "Gastos Fijos con cheque" del
+  // pedido): solo se puede elegir mientras el gasto todavía no tiene un
+  // cheque asociado — una vez creado, el estado del cheque se avanza desde
+  // la lista, no reabriendo este form (mismo criterio que Ingresos/Egresos).
+  const [chequeBanco, setChequeBanco] = useState('')
+  const [chequeNumero, setChequeNumero] = useState('')
+  const [chequeFechaVencimiento, setChequeFechaVencimiento] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const cajaSeleccionada = cajas.find(c => c.id === cajaId)
   const cuenta = (cajaSeleccionada?.nombre as Cuenta | undefined) ?? cuentaLegacy
   const tipoCaja = (cajaSeleccionada?.tipoCaja as TipoCaja | undefined) ?? caja
   const metodoSeleccionado = metodosPago.find(m => m.id === metodoPagoId)
+  const yaTieneCheque = !!existing?.chequeId
+  const esCheque = !yaTieneCheque && metodoSeleccionado?.tipo === 'CHEQUE'
 
   // Regla de negocio: caja Negra solo admite instrumentos INMEDIATO — mismo
   // filtrado bidireccional que Egreso (ver 0022_finanzas_regla_caja_instrumento.sql).
@@ -158,7 +195,7 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
     if (!next) onClose()
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!concepto || !montoPrevisto || !user) {
       toast.error('Completá concepto y monto previsto')
       return
@@ -167,14 +204,40 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
       toast.error('El monto no puede ser negativo')
       return
     }
+    if (esCheque && !chequeFechaVencimiento) {
+      toast.error('Completá la fecha de vencimiento del cheque')
+      return
+    }
     const payload = {
       fecha, concepto, categoria,
       montoPrevisto: Number(montoPrevisto),
       montoReal: montoReal === '' ? null : Number(montoReal),
-      periodicidad, cuenta, tipoCaja, cajaId: cajaSeleccionada?.id, metodoPagoId: metodoPagoId || undefined, estado,
+      periodicidad, cuenta, tipoCaja, cajaId: cajaSeleccionada?.id, metodoPagoId: metodoPagoId || undefined,
+      // Emitir el cheque es el acto de pago — la obligación queda PAGADO de
+      // una, la salida real de caja se rastrea aparte con fechaPagoEfectivo.
+      estado: esCheque ? ('PAGADO' as const) : estado,
       proveedorId: existing?.proveedorId ?? null,
       observaciones: observaciones || undefined,
     }
+
+    if (esCheque) {
+      setSaving(true)
+      const resultado = await guardarGastoFijoConCheque(
+        payload,
+        { banco: chequeBanco || undefined, numero: chequeNumero || undefined, fechaVencimiento: chequeFechaVencimiento },
+        user.id,
+        existing?.id,
+      )
+      setSaving(false)
+      if (!resultado.ok) {
+        toast.error(resultado.error)
+        return
+      }
+      toast.success(existing ? 'Gasto fijo actualizado' : 'Gasto fijo creado')
+      onClose()
+      return
+    }
+
     if (existing) {
       updateGastoFijo(existing.id, payload)
       toast.success('Gasto fijo actualizado')
@@ -238,12 +301,33 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
           <div>
             <label className="text-sm text-muted-foreground mb-1.5 block">¿Cómo se paga?</label>
             <div className="flex gap-2 flex-wrap">
-              <button onClick={() => setMetodoPagoId('')} className={`px-3 py-2 rounded-xl border text-sm ${!metodoPagoId ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>Sin especificar</button>
+              <button onClick={() => setMetodoPagoId('')} disabled={yaTieneCheque} className={`px-3 py-2 rounded-xl border text-sm disabled:opacity-40 ${!metodoPagoId ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>Sin especificar</button>
               {metodosDisponibles.filter(m => m.activo).map(m => (
-                <button key={m.id} onClick={() => setMetodoPagoId(m.id)} className={`px-3 py-2 rounded-xl border text-sm ${metodoPagoId === m.id ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{m.nombre}</button>
+                <button key={m.id} onClick={() => setMetodoPagoId(m.id)} disabled={yaTieneCheque} className={`px-3 py-2 rounded-xl border text-sm disabled:opacity-40 ${metodoPagoId === m.id ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{m.nombre}</button>
               ))}
             </div>
             {cajaElegidaEsNegra && <p className="text-xs text-muted-foreground mt-1">Caja Negra elegida arriba — solo admite Efectivo o Transferencia.</p>}
+            {yaTieneCheque && <p className="text-xs text-muted-foreground mt-1">Este gasto ya tiene un cheque asociado — avanzá su estado desde la lista.</p>}
+
+            {esCheque && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <p className="col-span-2 text-xs text-muted-foreground">
+                  El vencimiento de arriba sigue siendo el de la obligación — la salida de caja se registra cuando el cheque se marca Debitado (desde la lista).
+                </p>
+                <div className="col-span-2">
+                  <label className="text-sm text-muted-foreground mb-1.5 block">Banco</label>
+                  <input value={chequeBanco} onChange={e => setChequeBanco(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground mb-1.5 block">Número</label>
+                  <input value={chequeNumero} onChange={e => setChequeNumero(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground mb-1.5 block">Fecha vencimiento (débito)</label>
+                  <input type="date" value={chequeFechaVencimiento} onChange={e => setChequeFechaVencimiento(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -258,9 +342,10 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
               <label className="text-sm text-muted-foreground mb-1.5 block">Estado</label>
               <div className="flex gap-2">
                 {ESTADOS.map(e => (
-                  <button key={e} onClick={() => setEstado(e)} className={`flex-1 py-2.5 rounded-xl border text-xs ${estado === e ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{e}</button>
+                  <button key={e} onClick={() => setEstado(e)} disabled={esCheque} className={`flex-1 py-2.5 rounded-xl border text-xs disabled:opacity-40 ${(esCheque ? 'PAGADO' : estado) === e ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}>{e}</button>
                 ))}
               </div>
+              {esCheque && <p className="text-xs text-muted-foreground mt-1">Con cheque, el gasto queda PAGADO de una.</p>}
             </div>
           </div>
           <div>
@@ -270,7 +355,7 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleSave}>Guardar</Button>
+          <Button onClick={() => void handleSave()} disabled={saving}>Guardar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

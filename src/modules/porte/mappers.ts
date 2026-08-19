@@ -23,7 +23,7 @@ export function rowToIngreso(r: Row): Ingreso {
     fecha: r.fecha, tipoIngreso: r.tipo_ingreso, id: r.id_obra, concepto: r.concepto ?? '',
     monto: Number(r.monto), cuenta: r.cuenta, caja: r.caja, estado: r.estado, ref: r.ref,
     cajaId: r.caja_id ?? undefined, metodoCobroId: r.metodo_cobro_id ?? undefined,
-    fechaAcreditacion: r.fecha_acreditacion ?? undefined,
+    fechaAcreditacion: r.fecha_acreditacion ?? undefined, chequeId: r.cheque_id ?? undefined,
     activo: r.activo, createdAt: r.created_at, createdBy: r.created_by, updatedAt: r.updated_at,
   }
 }
@@ -40,6 +40,7 @@ export function ingresoToRow(i: Partial<Ingreso>): Row {
   if (i.cajaId !== undefined) row.caja_id = i.cajaId ?? null
   if (i.metodoCobroId !== undefined) row.metodo_cobro_id = i.metodoCobroId ?? null
   if (i.fechaAcreditacion !== undefined) row.fecha_acreditacion = i.fechaAcreditacion ?? null
+  if (i.chequeId !== undefined) row.cheque_id = i.chequeId ?? null
   if (i.activo !== undefined) row.activo = i.activo
   return row
 }
@@ -198,7 +199,9 @@ export function rowToGastoFijo(r: Row): GastoFijo {
   return {
     id: r.id, fecha: r.fecha, concepto: r.concepto, categoria: r.categoria, montoPrevisto: Number(r.monto_previsto ?? 0),
     montoReal: r.monto_real === null ? null : Number(r.monto_real), periodicidad: r.periodicidad, cuenta: r.cuenta,
-    tipoCaja: r.tipo_caja, cajaId: r.caja_id ?? undefined, metodoPagoId: r.metodo_pago_id ?? undefined, proveedorId: r.proveedor_id, estado: r.estado,
+    tipoCaja: r.tipo_caja, cajaId: r.caja_id ?? undefined, metodoPagoId: r.metodo_pago_id ?? undefined,
+    chequeId: r.cheque_id ?? undefined, fechaPagoEfectivo: r.fecha_pago_efectivo ?? null,
+    proveedorId: r.proveedor_id, estado: r.estado,
     observaciones: r.observaciones ?? undefined,
     activo: r.activo, createdAt: r.created_at, createdBy: r.created_by, updatedAt: r.updated_at,
   }
@@ -216,6 +219,8 @@ export function gastoFijoToRow(g: Partial<GastoFijo>): Row {
   if (g.tipoCaja !== undefined) row.tipo_caja = g.tipoCaja
   if (g.cajaId !== undefined) row.caja_id = g.cajaId ?? null
   if (g.metodoPagoId !== undefined) row.metodo_pago_id = g.metodoPagoId ?? null
+  if (g.chequeId !== undefined) row.cheque_id = g.chequeId ?? null
+  if (g.fechaPagoEfectivo !== undefined) row.fecha_pago_efectivo = g.fechaPagoEfectivo ?? null
   if (g.proveedorId !== undefined) row.proveedor_id = g.proveedorId
   if (g.estado !== undefined) row.estado = g.estado
   if (g.observaciones !== undefined) row.observaciones = g.observaciones ?? null
@@ -331,7 +336,7 @@ export function metodoPagoToRow(m: Partial<MetodoPago>): Row {
 
 export function rowToCheque(r: Row): Cheque {
   return {
-    id: r.id, numero: r.numero ?? null, banco: r.banco ?? null, monto: Number(r.monto),
+    id: r.id, direccion: r.direccion, numero: r.numero ?? null, banco: r.banco ?? null, monto: Number(r.monto),
     fechaEmision: r.fecha_emision, fechaVencimiento: r.fecha_vencimiento, fechaAcreditacion: r.fecha_acreditacion ?? null,
     cajaId: r.caja_id ?? null, estado: r.estado,
     createdAt: r.created_at, createdBy: r.created_by, updatedAt: r.updated_at,
@@ -339,6 +344,7 @@ export function rowToCheque(r: Row): Cheque {
 }
 export function chequeToRow(c: Partial<Cheque>): Row {
   const row: Row = {}
+  if (c.direccion !== undefined) row.direccion = c.direccion
   if (c.numero !== undefined) row.numero = c.numero ?? null
   if (c.banco !== undefined) row.banco = c.banco ?? null
   if (c.monto !== undefined) row.monto = c.monto
