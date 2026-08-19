@@ -11,10 +11,13 @@
 -- Hoy todo método de cobro existente es equivalente a INMEDIATO (el ingreso
 -- ya está en caja al cargarse) — se deja el campo para cuando exista un
 -- método de cobro no inmediato (ej. cheque de cliente).
-alter table metodos_cobro add column tipo metodo_pago_tipo not null default 'INMEDIATO';
+-- `if not exists` porque esta columna quedó creada manualmente contra
+-- producción antes de que el resto de esta migración llegara a correr —
+-- ver hallazgo en la sesión que agregó 0023/0024.
+alter table metodos_cobro add column if not exists tipo metodo_pago_tipo not null default 'INMEDIATO';
 
 -- ─── gastos_fijos gana método de pago opcional ──────────────────────────────
-alter table gastos_fijos add column metodo_pago_id uuid references metodos_pago(id);
+alter table gastos_fijos add column if not exists metodo_pago_id uuid references metodos_pago(id);
 
 -- ─── regla central: caja Negra + instrumento no inmediato = inválido ───────
 create or replace function fn_validar_instrumento_caja(p_caja_id uuid, p_tipo metodo_pago_tipo)

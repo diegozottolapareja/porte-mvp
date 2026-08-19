@@ -90,28 +90,29 @@ export default function EgresosPage() {
                   : `/egresos/nuevo?ref=${encodeURIComponent(egreso.ref)}`
                 )}
                 statusNode={
-                  <div className="flex items-center gap-1.5">
-                    {puedeEditar ? (
-                      <PillSelect
-                        value={egreso.estado}
-                        options={ESTADOS_EGRESO}
-                        style={v => ESTADO_STYLE[v]}
-                        onChange={estado => updateEgreso(egreso.ref, { estado })}
-                      />
-                    ) : (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
-                        {ESTADO_STYLE[egreso.estado].label}
-                      </span>
-                    )}
-                    {chequeInfo && (
-                      <button
-                        onClick={e => { e.stopPropagation(); if (puedeEditar) setPendingCheque(chequeInfo) }}
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].bgColor}`}
-                      >
-                        Cheque: {CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].label}
-                      </button>
-                    )}
-                  </div>
+                  chequeInfo ? (
+                    // Con un Cheque real vinculado, su estado (más granular:
+                    // Emitido/Entregado/Debitado/Rechazado/Anulado) reemplaza al
+                    // estado legado del egreso como pill principal — mostrar los
+                    // dos era redundante y confuso (ambos dicen "cheque").
+                    <button
+                      onClick={e => { e.stopPropagation(); if (puedeEditar) setPendingCheque(chequeInfo) }}
+                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].bgColor}`}
+                    >
+                      Cheque: {CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].label}
+                    </button>
+                  ) : puedeEditar ? (
+                    <PillSelect
+                      value={egreso.estado}
+                      options={ESTADOS_EGRESO}
+                      style={v => ESTADO_STYLE[v]}
+                      onChange={estado => updateEgreso(egreso.ref, { estado })}
+                    />
+                  ) : (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
+                      {ESTADO_STYLE[egreso.estado].label}
+                    </span>
+                  )
                 }
                 fields={[
                   { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true, row: 1, rowSpan: 2, size: 'lg' },
