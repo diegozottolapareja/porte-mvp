@@ -15,12 +15,14 @@ interface EntityDetailDialogProps {
   statusNode?: ReactNode
   fields: DetailField[]
   onEdit?: () => void
+  /** Acción secundaria opcional (ej. "Cambiar estado del cheque"), a la izquierda de Cerrar/Editar. */
+  footerExtra?: ReactNode
 }
 
 // Vista de solo lectura de una tarjeta (Ingreso/Egreso/Gasto fijo): tocar la
 // tarjeta abre esto en vez de ir directo a editar. El botón Editar de acá
 // lleva al formulario/dialog de edición existente — separa "ver" de "editar".
-export function EntityDetailDialog({ open, onClose, title, subtitle, statusNode, fields, onEdit }: EntityDetailDialogProps) {
+export function EntityDetailDialog({ open, onClose, title, subtitle, statusNode, fields, onEdit, footerExtra }: EntityDetailDialogProps) {
   return (
     <Dialog open={open} onOpenChange={next => !next && onClose()}>
       <DialogContent>
@@ -39,9 +41,12 @@ export function EntityDetailDialog({ open, onClose, title, subtitle, statusNode,
             </div>
           ))}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cerrar</Button>
-          {onEdit && <Button onClick={onEdit}>Editar</Button>}
+        <DialogFooter className="sm:justify-between sm:items-center">
+          {footerExtra ?? <div />}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button variant="outline" onClick={onClose}>Cerrar</Button>
+            {onEdit && <Button onClick={onEdit}>Editar</Button>}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

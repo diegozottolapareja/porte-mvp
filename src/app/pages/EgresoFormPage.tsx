@@ -6,8 +6,8 @@ import { AppShell } from '@/components/AppShell'
 import { Field } from '@/components/Field'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { CONFIG_LISTS, type TipoEgreso, type Cuenta, type TipoCaja, type Egreso, type EstadoEgreso } from '@/modules/porte'
-import { useVentas, useProveedores, useEgresos, useEgresoActions, useMetodosPago, useTarjetas, useCajas, type PagoEgresoInput } from '@/modules/porte/store'
+import { CONFIG_LISTS, CHEQUE_ESTADO_STYLE, type TipoEgreso, type Cuenta, type TipoCaja, type Egreso, type EstadoEgreso } from '@/modules/porte'
+import { useVentas, useProveedores, useEgresos, useEgresoActions, useMetodosPago, useTarjetas, useCajas, useCompromisosPago, useCheques, useChequeActions, type PagoEgresoInput } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal, addDaysLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
@@ -30,13 +30,22 @@ export default function EgresoFormPage() {
   const metodosPago = useMetodosPago()
   const tarjetas = useTarjetas()
   const cajas = useCajas()
-  const { addEgreso, updateEgreso, removeEgreso, findDuplicateEgreso, addEgresoConPago } = useEgresoActions()
+  const { addEgreso, updateEgreso, removeEgreso, findDuplicateEgreso, addEgresoConPago, attachChequeAEgreso } = useEgresoActions()
+  const { actualizarEstadoCheque } = useChequeActions()
+  const compromisosPago = useCompromisosPago()
+  const cheques = useCheques()
   const [searchParams] = useSearchParams()
   const editRef = searchParams.get('ref')
   const obraIdParam = searchParams.get('obraId')
   const editing = editRef ? egresos.find(e => e.ref === editRef) : undefined
   // Si viene desde la ficha de venta, guardar tiene que volver ahí para ver el egreso listado.
   const volverA = obraIdParam ? `/ventas/${encodeURIComponent(obraIdParam)}` : undefined
+  // Cheque real ya vinculado a este egreso (vía compromisos_pago), si hay
+  // uno — a diferencia del viejo flag `estado==='Emitido'`, este es el que
+  // efectivamente cuenta en el banner de "cheques todavía no debitados".
+  const compromisoConCheque = editing ? compromisosPago.find(cp => cp.egresoId === editing.ref && cp.chequeId) : undefined
+  const chequeLigado = compromisoConCheque?.chequeId ? cheques.find(c => c.id === compromisoConCheque.chequeId) : undefined
+  const chequeYaAvanzado = !!chequeLigado && chequeLigado.estado !== 'EMITIDO'
 
   const [fecha, setFecha] = useState(editing?.fecha ?? todayLocal())
   const [obraId, setObraId] = useState(editing?.id ?? obraIdParam ?? '')
@@ -52,13 +61,17 @@ export default function EgresoFormPage() {
   const [cajaId, setCajaId] = useState(editing?.cajaId ?? '')
   const [cuentaLegacy] = useState<Cuenta>(editing?.cuenta ?? CONFIG_LISTS.CUENTAS[0])
   const [caja, setCaja] = useState<TipoCaja>(editing?.caja ?? 'BLANCA')
-  // Edición de un egreso ya cargado: mantiene el flag legacy tal cual estaba
-  // (no se reinterpretan egresos viejos como si tuvieran un método de pago
-  // nuevo — ver comentario de la sección "¿Cómo se paga?" más abajo).
   const [estado, setEstado] = useState<EstadoEgreso>(editing?.estado ?? 'Confirmado')
-  const [esCheque, setEsCheque] = useState(!!editing?.fechaEmision)
-  const [fechaEmision, setFechaEmision] = useState(editing?.fechaEmision ?? '')
-  const [fechaAcreditacionLegacy, setFechaAcreditacionLegacy] = useState(editing?.fechaAcreditacion ?? '')
+  // "Es un cheque" en edición: a diferencia del alta, acá vincula/desvincula
+  // un Cheque real (vía attachChequeAEgreso/actualizarEstadoCheque) — no un
+  // flag cosmético. Tildarlo cuando no hay cheque todavía pide banco/número/
+  // vencimiento; destildarlo cuando ya hay uno lo anula (solo si sigue
+  // EMITIDO — ver `chequeYaAvanzado`).
+  const [esCheque, setEsCheque] = useState(false)
+  const [quitarCheque, setQuitarCheque] = useState(false)
+  const [chequeBancoNuevo, setChequeBancoNuevo] = useState('')
+  const [chequeNumeroNuevo, setChequeNumeroNuevo] = useState('')
+  const [chequeVencimientoNuevo, setChequeVencimientoNuevo] = useState('')
 
   // ─── "¿Cómo se paga?" — solo para egresos nuevos (sección 22 del pedido) ──
   // Reemplaza el checkbox "Es un cheque": según el método, genera el/los
@@ -102,16 +115,37 @@ export default function EgresoFormPage() {
     ? cajas.filter(c => c.tipoCaja === 'BLANCA')
     : cajas
 
-  const doSaveEditing = (montoNum: number) => {
+  const doSaveEditing = async (montoNum: number) => {
     if (!user || !editing) return
     updateEgreso(editing.ref, {
       fecha, id: obraId || undefined, proveedor: proveedorId || undefined, tipoEgreso, categoria,
       monto: montoNum, cuenta, caja: cajaTipo, cajaId: cajaSeleccionada?.id,
       estado,
-      fechaEmision: esCheque ? fechaEmision : undefined,
-      fechaAcreditacion: esCheque ? fechaAcreditacionLegacy : undefined,
     })
     // TODO: reemplazar con api.put(`/egresos/${editing.ref}`, payload)
+
+    if (!chequeLigado && esCheque) {
+      setSaving(true)
+      const resultado = await attachChequeAEgreso(
+        editing.ref,
+        { banco: chequeBancoNuevo || undefined, numero: chequeNumeroNuevo || undefined, fechaVencimiento: chequeVencimientoNuevo },
+        user.id,
+      )
+      setSaving(false)
+      if (!resultado.ok) {
+        toast.error(resultado.error)
+        return
+      }
+    } else if (chequeLigado && !chequeYaAvanzado && quitarCheque) {
+      setSaving(true)
+      const resultado = await actualizarEstadoCheque(chequeLigado.id, 'ANULADO', todayLocal())
+      setSaving(false)
+      if (!resultado.ok) {
+        toast.error(resultado.error)
+        return
+      }
+    }
+
     toast.success('Egreso actualizado')
     navigate(volverA ?? '/mis-registros')
   }
@@ -188,13 +222,17 @@ export default function EgresoFormPage() {
       toast.error('Elegí la tarjeta')
       return
     }
+    if (editing && !chequeLigado && esCheque && !chequeVencimientoNuevo) {
+      toast.error('Completá la fecha de vencimiento del cheque')
+      return
+    }
     const duplicado = findDuplicateEgreso(obraId || undefined, montoNum, fecha)
     if (duplicado && duplicado.ref !== editRef) {
       setPendingDuplicate(duplicado)
       setPendingLoadAnother(loadAnother)
       return
     }
-    if (editing) doSaveEditing(montoNum)
+    if (editing) void doSaveEditing(montoNum)
     else void doSaveNuevo(loadAnother, montoNum)
   }
 
@@ -310,22 +348,49 @@ export default function EgresoFormPage() {
               </div>
             </Field>
 
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={esCheque} onChange={e => setEsCheque(e.target.checked)} />
-              Es un cheque
-            </label>
-
-            {esCheque && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-sm text-muted-foreground mb-1.5 block">Fecha emisión</label>
-                  <input type="date" value={fechaEmision} onChange={e => setFechaEmision(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground mb-1.5 block">Fecha acreditación</label>
-                  <input type="date" value={fechaAcreditacionLegacy} onChange={e => setFechaAcreditacionLegacy(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
-                </div>
+            {chequeLigado ? (
+              <div className="p-4 rounded-2xl border border-border bg-muted/40 space-y-2">
+                <p className="text-sm font-medium">
+                  Cheque vinculado: {CHEQUE_ESTADO_STYLE[chequeLigado.estado].label}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {chequeLigado.banco || 'Sin banco'}{chequeLigado.numero ? ` · Nº ${chequeLigado.numero}` : ''} · Vto. {formatDate(chequeLigado.fechaVencimiento)}
+                </p>
+                {chequeYaAvanzado ? (
+                  <p className="text-xs text-muted-foreground">
+                    Este cheque ya está "{CHEQUE_ESTADO_STYLE[chequeLigado.estado].label}" — para anularlo, cambiá su estado desde la tarjeta del egreso.
+                  </p>
+                ) : (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={!quitarCheque} onChange={e => setQuitarCheque(!e.target.checked)} />
+                    Mantener vinculado el cheque
+                  </label>
+                )}
               </div>
+            ) : (
+              <>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={esCheque} onChange={e => setEsCheque(e.target.checked)} />
+                  Se paga con cheque
+                </label>
+
+                {esCheque && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-sm text-muted-foreground mb-1.5 block">Banco</label>
+                      <input value={chequeBancoNuevo} onChange={e => setChequeBancoNuevo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground mb-1.5 block">Número</label>
+                      <input value={chequeNumeroNuevo} onChange={e => setChequeNumeroNuevo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground mb-1.5 block">Fecha vencimiento</label>
+                      <input type="date" value={chequeVencimientoNuevo} onChange={e => setChequeVencimientoNuevo(e.target.value)} className="w-full h-12 px-4 rounded-2xl border border-border bg-white text-sm" />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         ) : (
@@ -430,7 +495,7 @@ export default function EgresoFormPage() {
           setPendingDuplicate(null)
           const montoNum = toPositiveAmount(monto)
           if (!montoNum) return
-          if (editing) doSaveEditing(montoNum)
+          if (editing) void doSaveEditing(montoNum)
           else void doSaveNuevo(pendingLoadAnother, montoNum)
         }}
       />

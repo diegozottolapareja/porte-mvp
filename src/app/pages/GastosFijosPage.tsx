@@ -74,34 +74,24 @@ export default function GastosFijosPage() {
               subtitle={`${g.categoria} · ${g.periodicidad} · ${formatDate(g.fecha)}`}
               onClick={() => setViewing(g)}
               statusNode={
-                <div className="flex items-center gap-1.5">
-                  {puedeEditar ? (
-                    <PillSelect
-                      value={g.estado}
-                      options={ESTADOS}
-                      style={v => ESTADO_STYLE[v]}
-                      onChange={estado => updateGastoFijo(g.id, {
-                        estado,
-                        // Marcar PAGADO desde acá es el camino rápido (sin
-                        // abrir el diálogo) — si todavía no hay un "Real"
-                        // cargado, se asume que se pagó lo previsto en vez
-                        // de dejar la tarjeta en un estado inconsistente
-                        // ("PAGADO" pero Real/Diferencia en "—").
-                        ...(estado === 'PAGADO' && g.montoReal === null ? { montoReal: g.montoPrevisto } : {}),
-                      })}
-                    />
-                  ) : (
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>
-                  )}
-                  {cheque && (
-                    <button
-                      onClick={e => { e.stopPropagation(); if (puedeEditar) setPendingCheque(cheque) }}
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[cheque.estado].color} ${CHEQUE_ESTADO_STYLE[cheque.estado].bgColor}`}
-                    >
-                      Cheque: {CHEQUE_ESTADO_STYLE[cheque.estado].label}
-                    </button>
-                  )}
-                </div>
+                puedeEditar ? (
+                  <PillSelect
+                    value={g.estado}
+                    options={ESTADOS}
+                    style={v => ESTADO_STYLE[v]}
+                    onChange={estado => updateGastoFijo(g.id, {
+                      estado,
+                      // Marcar PAGADO desde acá es el camino rápido (sin
+                      // abrir el diálogo) — si todavía no hay un "Real"
+                      // cargado, se asume que se pagó lo previsto en vez
+                      // de dejar la tarjeta en un estado inconsistente
+                      // ("PAGADO" pero Real/Diferencia en "—").
+                      ...(estado === 'PAGADO' && g.montoReal === null ? { montoReal: g.montoPrevisto } : {}),
+                    })}
+                  />
+                ) : (
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>
+                )
               }
               fields={[
                 { label: 'Previsto', value: formatCurrency(g.montoPrevisto), row: 1 },
@@ -130,13 +120,7 @@ export default function GastosFijosPage() {
         title={viewing?.concepto ?? ''}
         subtitle={viewing ? `${viewing.categoria} · ${viewing.periodicidad} · ${formatDate(viewing.fecha)}` : undefined}
         statusNode={viewing && (
-          viewingCheque ? (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].color} ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].bgColor}`}>
-              Cheque: {CHEQUE_ESTADO_STYLE[viewingCheque.estado].label}
-            </span>
-          ) : (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[viewing.estado].color} ${ESTADO_STYLE[viewing.estado].bgColor}`}>{viewing.estado}</span>
-          )
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[viewing.estado].color} ${ESTADO_STYLE[viewing.estado].bgColor}`}>{viewing.estado}</span>
         )}
         fields={viewing ? [
           { label: 'Previsto', value: formatCurrency(viewing.montoPrevisto) },
@@ -144,10 +128,23 @@ export default function GastosFijosPage() {
           { label: 'Diferencia', value: viewingDiferencia === null ? '—' : formatCurrency(viewingDiferencia) },
           { label: 'Cuenta', value: viewing.cuenta },
           { label: 'Caja', value: viewing.tipoCaja },
-          ...(viewingCheque ? [{ label: 'Vto. cheque', value: formatDate(viewingCheque.fechaVencimiento) }] : []),
+          ...(viewingCheque ? [
+            { label: 'Cheque', value: CHEQUE_ESTADO_STYLE[viewingCheque.estado].label },
+            { label: 'Banco', value: viewingCheque.banco ?? '—' },
+            { label: 'Número', value: viewingCheque.numero ?? '—' },
+            { label: 'Vto. cheque', value: formatDate(viewingCheque.fechaVencimiento) },
+          ] : []),
           ...(viewing.observaciones ? [{ label: 'Observaciones', value: viewing.observaciones }] : []),
         ] : []}
         onEdit={viewing && puedeEditar ? () => { const g = viewing; setViewing(null); setEditing(g) } : undefined}
+        footerExtra={viewing && viewingCheque && puedeEditar ? (
+          <button
+            onClick={() => { setPendingCheque(viewingCheque); setViewing(null) }}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].color} ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].bgColor}`}
+          >
+            Cambiar estado del cheque
+          </button>
+        ) : undefined}
       />
 
       <GastoFijoDialog
@@ -187,8 +184,10 @@ export default function GastosFijosPage() {
 function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null; onClose: () => void }) {
   const { user } = useAuth()
   const { addGastoFijo, updateGastoFijo, guardarGastoFijoConCheque } = useGastoFijoActions()
+  const { actualizarEstadoCheque } = useChequeActions()
   const cajas = useCajas()
   const metodosPago = useMetodosPago()
+  const cheques = useCheques()
   const existing = value && value !== 'nuevo' ? value : undefined
 
   const [fecha, setFecha] = useState(existing?.fecha ?? todayLocal())
@@ -213,6 +212,7 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
   const [chequeBanco, setChequeBanco] = useState('')
   const [chequeNumero, setChequeNumero] = useState('')
   const [chequeFechaVencimiento, setChequeFechaVencimiento] = useState('')
+  const [quitarCheque, setQuitarCheque] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const cajaSeleccionada = cajas.find(c => c.id === cajaId)
@@ -221,6 +221,8 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
   const metodoSeleccionado = metodosPago.find(m => m.id === metodoPagoId)
   const yaTieneCheque = !!existing?.chequeId
   const esCheque = !yaTieneCheque && metodoSeleccionado?.tipo === 'CHEQUE'
+  const chequeLigado = existing?.chequeId ? cheques.find(c => c.id === existing.chequeId) : undefined
+  const chequeYaAvanzado = !!chequeLigado && chequeLigado.estado !== 'EMITIDO'
 
   // Regla de negocio: caja Negra solo admite instrumentos INMEDIATO — mismo
   // filtrado bidireccional que Egreso (ver 0022_finanzas_regla_caja_instrumento.sql).
@@ -281,6 +283,15 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
 
     if (existing) {
       updateGastoFijo(existing.id, payload)
+      if (chequeLigado && !chequeYaAvanzado && quitarCheque) {
+        setSaving(true)
+        const resultado = await actualizarEstadoCheque(chequeLigado.id, 'ANULADO', todayLocal())
+        setSaving(false)
+        if (!resultado.ok) {
+          toast.error(resultado.error)
+          return
+        }
+      }
       toast.success('Gasto fijo actualizado')
     } else {
       addGastoFijo(payload, user.id)
@@ -348,7 +359,25 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
               ))}
             </div>
             {cajaElegidaEsNegra && <p className="text-xs text-muted-foreground mt-1">Caja Negra elegida arriba — solo admite Efectivo o Transferencia.</p>}
-            {yaTieneCheque && <p className="text-xs text-muted-foreground mt-1">Este gasto ya tiene un cheque asociado — avanzá su estado desde la lista.</p>}
+
+            {chequeLigado && (
+              <div className="mt-3 p-4 rounded-2xl border border-border bg-muted/40 space-y-2">
+                <p className="text-sm font-medium">Cheque vinculado: {CHEQUE_ESTADO_STYLE[chequeLigado.estado].label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {chequeLigado.banco || 'Sin banco'}{chequeLigado.numero ? ` · Nº ${chequeLigado.numero}` : ''} · Vto. {formatDate(chequeLigado.fechaVencimiento)}
+                </p>
+                {chequeYaAvanzado ? (
+                  <p className="text-xs text-muted-foreground">
+                    Este cheque ya está "{CHEQUE_ESTADO_STYLE[chequeLigado.estado].label}" — para anularlo, cambiá su estado desde la tarjeta del gasto fijo.
+                  </p>
+                ) : (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={!quitarCheque} onChange={e => setQuitarCheque(!e.target.checked)} />
+                    Mantener vinculado el cheque
+                  </label>
+                )}
+              </div>
+            )}
 
             {esCheque && (
               <div className="grid grid-cols-2 gap-3 mt-3">

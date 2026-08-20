@@ -96,18 +96,7 @@ export default function EgresosPage() {
                 subtitle={`${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
                 onClick={() => setViewing(egreso)}
                 statusNode={
-                  chequeInfo ? (
-                    // Con un Cheque real vinculado, su estado (más granular:
-                    // Emitido/Entregado/Debitado/Rechazado/Anulado) reemplaza al
-                    // estado legado del egreso como pill principal — mostrar los
-                    // dos era redundante y confuso (ambos dicen "cheque").
-                    <button
-                      onClick={e => { e.stopPropagation(); if (puedeEditar) setPendingCheque(chequeInfo) }}
-                      className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].bgColor}`}
-                    >
-                      Cheque: {CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].label}
-                    </button>
-                  ) : puedeEditar ? (
+                  puedeEditar ? (
                     <PillSelect
                       value={egreso.estado}
                       options={ESTADOS_EGRESO}
@@ -148,15 +137,9 @@ export default function EgresosPage() {
         title={viewing?.tipoEgreso ?? ''}
         subtitle={viewing ? `${viewing.id ?? 'Gasto fijo'} · ${formatDate(viewing.fecha)}` : undefined}
         statusNode={viewing && (
-          viewingChequeInfo ? (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].bgColor}`}>
-              Cheque: {CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].label}
-            </span>
-          ) : (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[viewing.estado].color} ${ESTADO_STYLE[viewing.estado].bgColor}`}>
-              {ESTADO_STYLE[viewing.estado].label}
-            </span>
-          )
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[viewing.estado].color} ${ESTADO_STYLE[viewing.estado].bgColor}`}>
+            {ESTADO_STYLE[viewing.estado].label}
+          </span>
         )}
         fields={viewing ? [
           { label: 'Referencia', value: viewing.ref },
@@ -166,9 +149,22 @@ export default function EgresosPage() {
           { label: 'Categoría', value: viewing.categoria },
           { label: 'Cuenta', value: viewing.cuenta },
           { label: 'Caja', value: viewing.caja },
-          ...(viewingChequeInfo ? [{ label: 'Vto. cheque', value: formatDate(viewingChequeInfo.cheque.fechaVencimiento) }] : []),
+          ...(viewingChequeInfo ? [
+            { label: 'Cheque', value: CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].label },
+            { label: 'Banco', value: viewingChequeInfo.cheque.banco ?? '—' },
+            { label: 'Número', value: viewingChequeInfo.cheque.numero ?? '—' },
+            { label: 'Vto. cheque', value: formatDate(viewingChequeInfo.cheque.fechaVencimiento) },
+          ] : []),
         ] : []}
         onEdit={viewing && puedeEditar ? () => irAEditar(viewing) : undefined}
+        footerExtra={viewing && viewingChequeInfo && puedeEditar ? (
+          <button
+            onClick={() => { setPendingCheque(viewingChequeInfo); setViewing(null) }}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full ${CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].bgColor}`}
+          >
+            Cambiar estado del cheque
+          </button>
+        ) : undefined}
       />
 
       <ChequeEstadoDialog

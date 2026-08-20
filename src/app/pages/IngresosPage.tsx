@@ -79,28 +79,18 @@ export default function IngresosPage() {
                 subtitle={`${ingreso.id} · ${formatDate(ingreso.fecha)}`}
                 onClick={() => setViewing(ingreso)}
                 statusNode={
-                  <div className="flex items-center gap-1.5">
-                    {puedeEditar ? (
-                      <PillSelect
-                        value={ingreso.estado}
-                        options={ESTADOS_INGRESO}
-                        style={v => ESTADO_INGRESO_STYLE[v]}
-                        onChange={estado => updateIngreso(ingreso.ref, { estado })}
-                      />
-                    ) : (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_INGRESO_STYLE[ingreso.estado].color} ${ESTADO_INGRESO_STYLE[ingreso.estado].bgColor}`}>
-                        {ESTADO_INGRESO_STYLE[ingreso.estado].label}
-                      </span>
-                    )}
-                    {cheque && (
-                      <button
-                        onClick={e => { e.stopPropagation(); if (puedeEditar) setPendingCheque(cheque) }}
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[cheque.estado].color} ${CHEQUE_ESTADO_STYLE[cheque.estado].bgColor}`}
-                      >
-                        Cheque: {CHEQUE_ESTADO_STYLE[cheque.estado].label}
-                      </button>
-                    )}
-                  </div>
+                  puedeEditar ? (
+                    <PillSelect
+                      value={ingreso.estado}
+                      options={ESTADOS_INGRESO}
+                      style={v => ESTADO_INGRESO_STYLE[v]}
+                      onChange={estado => updateIngreso(ingreso.ref, { estado })}
+                    />
+                  ) : (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_INGRESO_STYLE[ingreso.estado].color} ${ESTADO_INGRESO_STYLE[ingreso.estado].bgColor}`}>
+                      {ESTADO_INGRESO_STYLE[ingreso.estado].label}
+                    </span>
+                  )
                 }
                 fields={[
                   { label: 'Monto', value: formatCurrency(ingreso.monto), highlight: true, row: 1, rowSpan: 2, size: 'lg' },
@@ -141,9 +131,22 @@ export default function IngresosPage() {
           { label: 'Tipo de ingreso', value: viewing.tipoIngreso },
           { label: 'Cuenta', value: viewing.cuenta },
           { label: 'Caja', value: viewing.caja },
-          ...(viewingCheque ? [{ label: 'Vto. cheque', value: formatDate(viewingCheque.fechaVencimiento) }] : []),
+          ...(viewingCheque ? [
+            { label: 'Cheque', value: CHEQUE_ESTADO_STYLE[viewingCheque.estado].label },
+            { label: 'Banco', value: viewingCheque.banco ?? '—' },
+            { label: 'Número', value: viewingCheque.numero ?? '—' },
+            { label: 'Vto. cheque', value: formatDate(viewingCheque.fechaVencimiento) },
+          ] : []),
         ] : []}
         onEdit={viewing && puedeEditar ? () => irAEditar(viewing) : undefined}
+        footerExtra={viewing && viewingCheque && puedeEditar ? (
+          <button
+            onClick={() => { setPendingCheque(viewingCheque); setViewing(null) }}
+            className={`text-xs font-medium px-3 py-1.5 rounded-full ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].color} ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].bgColor}`}
+          >
+            Cambiar estado del cheque
+          </button>
+        ) : undefined}
       />
 
       <ChequeEstadoDialog

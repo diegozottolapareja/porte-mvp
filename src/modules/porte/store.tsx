@@ -556,7 +556,53 @@ export function useEgresoActions() {
     return { ok: true, egreso }
   }
 
-  return { addEgreso, updateEgreso, removeEgreso, softDeleteEgreso, findDuplicateEgreso, addEgresoConPago }
+  /**
+   * Vincula un cheque real a un egreso YA EXISTENTE (a diferencia de
+   * `addEgresoConPago`, que solo corre al crear uno nuevo) — cubre el caso de
+   * "esto en realidad se pagó/se va a pagar con cheque" descubierto después
+   * de cargar el egreso. Crea el cheque (EMITIDO) + su compromiso_pago, igual
+   * que la rama CHEQUE de `addEgresoConPago`, para que el egreso pase a
+   * contar en el banner de "cheques todavía no debitados" de EgresosPage.
+   */
+  const attachChequeAEgreso = async (
+    egresoRef: string,
+    chequeInput: { banco?: string; numero?: string; fechaVencimiento: string },
+    userId: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const current = queryClient.getQueryData<Egreso[]>(porteKey('egresos')) ?? []
+    const egreso = current.find(e => e.ref === egresoRef)
+    if (!egreso) return { ok: false, error: 'Egreso no encontrado' }
+
+    const metodosPago = queryClient.getQueryData<MetodoPago[]>(porteKey('metodosPago')) ?? []
+    const metodoCheque = metodosPago.find(m => m.tipo === 'CHEQUE')
+
+    const { data: cheque, error: chequeError } = await supabase.from('cheques').insert({
+      direccion: 'PAGO', numero: chequeInput.numero || null, banco: chequeInput.banco || null, monto: egreso.monto,
+      fecha_emision: egreso.fecha, fecha_vencimiento: chequeInput.fechaVencimiento, caja_id: egreso.cajaId ?? null,
+      estado: 'EMITIDO', created_by: userId,
+    }).select('id').single()
+    if (chequeError || !cheque) {
+      logPersistError('attachChequeAEgreso:cheque', chequeError)
+      return { ok: false, error: 'No se pudo crear el cheque' }
+    }
+
+    const { error: compromisoError } = await supabase.from('compromisos_pago').insert({
+      egreso_id: egresoRef, monto: egreso.monto, metodo_pago_id: metodoCheque?.id ?? null,
+      fecha_vencimiento: chequeInput.fechaVencimiento, caja_id: egreso.cajaId ?? null,
+      estado: 'PENDIENTE', cheque_id: cheque.id, created_by: userId,
+    })
+    if (compromisoError) {
+      logPersistError('attachChequeAEgreso:compromiso', compromisoError)
+      return { ok: false, error: 'El cheque se creó pero no se pudo vincular al egreso. Revisalo en Finanzas.' }
+    }
+
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'compromisosPago'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] })
+    return { ok: true }
+  }
+
+  return { addEgreso, updateEgreso, removeEgreso, softDeleteEgreso, findDuplicateEgreso, addEgresoConPago, attachChequeAEgreso }
 }
 
 export interface PagoEgresoInput {
