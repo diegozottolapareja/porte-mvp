@@ -46,7 +46,12 @@ const TRANSICIONES: Record<ChequeDireccion, Partial<Record<ChequeEstado, ChequeE
     ENTREGADO: ['DEBITADO', 'RECHAZADO'],
   },
   COBRO: {
-    EN_CARTERA: ['DEPOSITADO', 'ANULADO'],
+    // ANULADO no se ofrece acá: no hay ningún caso de negocio implementado
+    // que lo necesite para un cheque recibido — el único uso real de ANULADO
+    // hoy es "quitar cheque" en Egreso/GastoFijo, que en realidad es un
+    // desvincular (ver desvincularChequeDe*), no un anular. El valor sigue
+    // siendo válido en la DB/tipos por si alguna fila histórica lo trae.
+    EN_CARTERA: ['DEPOSITADO'],
     DEPOSITADO: ['ACREDITADO', 'RECHAZADO'],
   },
 }

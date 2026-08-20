@@ -6,8 +6,9 @@ import { AppShell } from '@/components/AppShell'
 import { Field } from '@/components/Field'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { LoadingDots } from '@/components/LoadingDots'
 import { CONFIG_LISTS, CHEQUE_ESTADO_STYLE, type TipoEgreso, type Cuenta, type TipoCaja, type Egreso, type EstadoEgreso } from '@/modules/porte'
-import { useVentas, useProveedores, useEgresos, useEgresoActions, useMetodosPago, useTarjetas, useCajas, useCompromisosPago, useCheques, useChequeActions, type PagoEgresoInput } from '@/modules/porte/store'
+import { useVentas, useProveedores, useEgresosConEstado, useEgresoActions, useMetodosPago, useTarjetas, useCajas, useCompromisosPago, useCompromisoPagoActions, chequeDeEgreso, useCheques, type PagoEgresoInput } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal, addDaysLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
@@ -16,35 +17,66 @@ import { supabase } from '@/lib/supabaseClient'
 // Categoría directa/indirecta puede repetirse entre las dos listas (ej.
 // SERVICIOS, HERRAMIENTAS) — se muestran una sola vez.
 const CATEGORIAS_EGRESO = [...new Set([...CONFIG_LISTS.CATEG_DIRECTOS, ...CONFIG_LISTS.CATEG_INDIRECTOS])]
-// "Incompleto" no es seleccionable a mano — mismo criterio que la pill de
-// EgresosPage.tsx: es un estado derivado (ver validación de duplicados), no
-// una transición manual válida.
-const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
+// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
+// el modelo real (ver `chequeLigado`/`chequeDeEgreso`), nunca este campo.
+const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente']
 
+// Gate de carga: en una navegación en frío (F5 / deep link a
+// `?ref=EG-XXXX`), `useEgresosConEstado()` puede resolver después del primer
+// render. Si el form interior montara ya con `egresos === []`, sus
+// `useState(editing?.campo ?? default)` capturarían el default para siempre
+// (el inicializador de useState solo corre una vez). Este componente exterior
+// no monta `EgresoForm` hasta que la query terminó — así el único render que
+// importa ya tiene los datos reales, y nunca se ve un form "nuevo" vacío
+// pisando por encima de un registro que en realidad existe.
 export default function EgresoFormPage() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const editRef = searchParams.get('ref')
+  const { data: egresos, isPending } = useEgresosConEstado()
+
+  if (editRef && isPending) {
+    return (
+      <AppShell title="Editar egreso" onBack={() => navigate(-1)}>
+        <div className="py-16 flex justify-center"><LoadingDots /></div>
+      </AppShell>
+    )
+  }
+
+  const editing = editRef ? egresos.find(e => e.ref === editRef) : undefined
+  if (editRef && !editing) {
+    return (
+      <AppShell title="Egreso no encontrado" onBack={() => navigate(-1)}>
+        <p className="text-sm text-muted-foreground text-center py-16">No se encontró el egreso {editRef}.</p>
+      </AppShell>
+    )
+  }
+
+  return <EgresoForm key={editRef ?? 'nuevo'} editing={editing} />
+}
+
+function EgresoForm({ editing }: { editing: Egreso | undefined }) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const ventas = useVentas()
   const proveedores = useProveedores()
-  const egresos = useEgresos()
   const metodosPago = useMetodosPago()
   const tarjetas = useTarjetas()
   const cajas = useCajas()
   const { addEgreso, updateEgreso, removeEgreso, findDuplicateEgreso, addEgresoConPago, attachChequeAEgreso } = useEgresoActions()
-  const { actualizarEstadoCheque } = useChequeActions()
+  const { desvincularChequeDeEgreso } = useCompromisoPagoActions()
   const compromisosPago = useCompromisosPago()
   const cheques = useCheques()
   const [searchParams] = useSearchParams()
-  const editRef = searchParams.get('ref')
+  const editRef = editing?.ref ?? null
   const obraIdParam = searchParams.get('obraId')
-  const editing = editRef ? egresos.find(e => e.ref === editRef) : undefined
   // Si viene desde la ficha de venta, guardar tiene que volver ahí para ver el egreso listado.
   const volverA = obraIdParam ? `/ventas/${encodeURIComponent(obraIdParam)}` : undefined
   // Cheque real ya vinculado a este egreso (vía compromisos_pago), si hay
   // uno — a diferencia del viejo flag `estado==='Emitido'`, este es el que
   // efectivamente cuenta en el banner de "cheques todavía no debitados".
-  const compromisoConCheque = editing ? compromisosPago.find(cp => cp.egresoId === editing.ref && cp.chequeId) : undefined
-  const chequeLigado = compromisoConCheque?.chequeId ? cheques.find(c => c.id === compromisoConCheque.chequeId) : undefined
+  const chequeInfo = chequeDeEgreso(editing, cheques, compromisosPago)
+  const chequeLigado = chequeInfo?.cheque
   const chequeYaAvanzado = !!chequeLigado && chequeLigado.estado !== 'EMITIDO'
 
   const [fecha, setFecha] = useState(editing?.fecha ?? todayLocal())
@@ -63,10 +95,10 @@ export default function EgresoFormPage() {
   const [caja, setCaja] = useState<TipoCaja>(editing?.caja ?? 'BLANCA')
   const [estado, setEstado] = useState<EstadoEgreso>(editing?.estado ?? 'Confirmado')
   // "Es un cheque" en edición: a diferencia del alta, acá vincula/desvincula
-  // un Cheque real (vía attachChequeAEgreso/actualizarEstadoCheque) — no un
-  // flag cosmético. Tildarlo cuando no hay cheque todavía pide banco/número/
-  // vencimiento; destildarlo cuando ya hay uno lo anula (solo si sigue
-  // EMITIDO — ver `chequeYaAvanzado`).
+  // un Cheque real (vía attachChequeAEgreso/desvincularChequeDeEgreso) — no
+  // un flag cosmético. Tildarlo cuando no hay cheque todavía pide banco/
+  // número/vencimiento; destildarlo cuando ya hay uno lo desvincula (el
+  // cheque real no se anula, solo si sigue EMITIDO — ver `chequeYaAvanzado`).
   const [esCheque, setEsCheque] = useState(false)
   const [quitarCheque, setQuitarCheque] = useState(false)
   const [chequeBancoNuevo, setChequeBancoNuevo] = useState('')
@@ -136,9 +168,9 @@ export default function EgresoFormPage() {
         toast.error(resultado.error)
         return
       }
-    } else if (chequeLigado && !chequeYaAvanzado && quitarCheque) {
+    } else if (chequeLigado && chequeInfo && !chequeYaAvanzado && quitarCheque) {
       setSaving(true)
-      const resultado = await actualizarEstadoCheque(chequeLigado.id, 'ANULADO', todayLocal())
+      const resultado = await desvincularChequeDeEgreso(chequeInfo.compromisoId)
       setSaving(false)
       if (!resultado.ok) {
         toast.error(resultado.error)
@@ -365,6 +397,11 @@ export default function EgresoFormPage() {
                     <input type="checkbox" checked={!quitarCheque} onChange={e => setQuitarCheque(!e.target.checked)} />
                     Mantener vinculado el cheque
                   </label>
+                )}
+                {!chequeYaAvanzado && quitarCheque && (
+                  <p className="text-xs text-muted-foreground">
+                    Se desvincula del egreso — el cheque sigue existiendo, no se anula.
+                  </p>
                 )}
               </div>
             ) : (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/app/components/ui/dialog'
 import { Button } from '@/app/components/ui/button'
+import type { ChequeDireccion } from '@/modules/porte'
 
 export interface ChequeAttachData {
   banco: string
@@ -10,15 +11,16 @@ export interface ChequeAttachData {
 
 interface ChequeAttachDialogProps {
   open: boolean
+  direccion: ChequeDireccion
   onClose: () => void
   onConfirm: (data: ChequeAttachData) => Promise<void>
 }
 
-// Se abre cuando el pill de una tarjeta pasa a "Cheque emitido" — pide los
-// mismos datos que el alta con cheque, para que la tarjeta termine idéntica
-// a una creada con cheque desde el vamos (cheque real vinculado, cuenta en
-// el banner de "cheques todavía no debitados").
-export function ChequeAttachDialog({ open, onClose, onConfirm }: ChequeAttachDialogProps) {
+// Diálogo único para "Vincular cheque" — lo dispara la acción explícita del
+// mismo nombre en Egresos (PAGO) e Ingresos (COBRO), nunca un pill cosmético.
+// Pide los mismos datos que el alta con cheque, para que la tarjeta termine
+// idéntica a una creada con cheque desde el vamos.
+export function ChequeAttachDialog({ open, direccion, onClose, onConfirm }: ChequeAttachDialogProps) {
   const [banco, setBanco] = useState('')
   const [numero, setNumero] = useState('')
   const [fechaVencimiento, setFechaVencimiento] = useState('')
@@ -44,10 +46,12 @@ export function ChequeAttachDialog({ open, onClose, onConfirm }: ChequeAttachDia
     <Dialog open={open} onOpenChange={next => !next && !saving && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Datos del cheque</DialogTitle>
+          <DialogTitle>{direccion === 'PAGO' ? 'Vincular cheque emitido' : 'Vincular cheque recibido'}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground -mt-2">
-          Completá los datos del cheque para vincularlo — va a sumar al contador de cheques todavía no debitados.
+          {direccion === 'PAGO'
+            ? 'Completá los datos del cheque para vincularlo — va a sumar al contador de cheques todavía no debitados.'
+            : 'Completá los datos del cheque recibido — queda en cartera hasta que lo deposités y se acredite.'}
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">

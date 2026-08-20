@@ -169,10 +169,25 @@ function useEntity<T>(table: TableKey, queryFn: () => Promise<T[]>): T[] {
   return data ?? []
 }
 
+/**
+ * Igual que `useEntity` pero sin descartar el estado de carga — lo necesitan
+ * los forms de edición (`EgresoFormPage`/`IngresoFormPage`) para no inicializar
+ * sus campos con defaults antes de que la query resuelva en una navegación en
+ * frío (F5 / deep link con cache vacía). Misma queryKey que el hook de solo
+ * lectura de la entidad, así que React Query dedupea el fetch — no dispara una
+ * segunda llamada de red.
+ */
+function useEntityConEstado<T>(table: TableKey, queryFn: () => Promise<T[]>): { data: T[]; isPending: boolean } {
+  const { data, isPending } = useQuery({ queryKey: porteKey(table), queryFn })
+  return { data: data ?? [], isPending }
+}
+
 // ─── Lectura — un hook por entidad, se dispara recién al montarse ───────────
 
 export function useIngresos(): Ingreso[] { return useEntity('ingresos', fetchIngresos) }
 export function useEgresos(): Egreso[] { return useEntity('egresos', fetchEgresos) }
+export function useIngresosConEstado(): { data: Ingreso[]; isPending: boolean } { return useEntityConEstado('ingresos', fetchIngresos) }
+export function useEgresosConEstado(): { data: Egreso[]; isPending: boolean } { return useEntityConEstado('egresos', fetchEgresos) }
 export function usePresupuestos(): Presupuesto[] { return useEntity('presupuestos', fetchPresupuestos) }
 export function useVentas(): Venta[] { return useEntity('ventas', fetchVentas) }
 export function useProveedores(): Proveedor[] { return useEntity('proveedores', fetchProveedores) }
@@ -413,7 +428,54 @@ export function useIngresoActions() {
     return { ok: true, ingreso: nuevo }
   }
 
-  return { addIngreso, updateIngreso, removeIngreso, softDeleteIngreso, findDuplicateIngreso, addIngresoConCheque }
+  /**
+   * Vincula un cheque real a un ingreso YA EXISTENTE — mismo criterio que
+   * `attachChequeAEgreso`, pero más simple: el vínculo de Ingreso es directo
+   * (`ingresos.cheque_id`), no vía `compromisos_pago`.
+   */
+  const attachChequeAIngreso = async (
+    ingresoRef: string,
+    chequeInput: { banco?: string; numero?: string; fechaVencimiento: string },
+    userId: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const current = queryClient.getQueryData<Ingreso[]>(porteKey('ingresos')) ?? []
+    const ingreso = current.find(i => i.ref === ingresoRef)
+    if (!ingreso) return { ok: false, error: 'Ingreso no encontrado' }
+
+    const { data: cheque, error: chequeError } = await supabase.from('cheques').insert({
+      direccion: 'COBRO', numero: chequeInput.numero || null, banco: chequeInput.banco || null, monto: ingreso.monto,
+      fecha_emision: ingreso.fecha, fecha_vencimiento: chequeInput.fechaVencimiento, caja_id: ingreso.cajaId ?? null,
+      estado: 'EN_CARTERA', created_by: userId,
+    }).select('id').single()
+    if (chequeError || !cheque) {
+      logPersistError('attachChequeAIngreso:cheque', chequeError)
+      return { ok: false, error: 'No se pudo crear el cheque' }
+    }
+
+    updateIngreso(ingresoRef, { chequeId: cheque.id })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] })
+    void queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] })
+    return { ok: true }
+  }
+
+  /** Desvincular ≠ Anular: solo saca la relación (`chequeId = null`), el cheque real sigue existiendo con su estado intacto. */
+  const desvincularChequeDeIngreso = (ref: string) => updateIngreso(ref, { chequeId: null })
+
+  return { addIngreso, updateIngreso, removeIngreso, softDeleteIngreso, findDuplicateIngreso, addIngresoConCheque, attachChequeAIngreso, desvincularChequeDeIngreso }
+}
+
+/**
+ * Única implementación de "¿tiene cheque este ingreso?" — reemplaza los
+ * lookups inline repetidos por página. Función simple (no hook) para poder
+ * llamarla dentro de un `renderItem` de lista sin violar las reglas de hooks;
+ * `useChequeDeIngreso` es el atajo para el caso de un solo registro.
+ */
+export function chequeDeIngreso(ingreso: Ingreso | undefined, cheques: Cheque[]): Cheque | undefined {
+  if (!ingreso?.chequeId) return undefined
+  return cheques.find(c => c.id === ingreso.chequeId)
+}
+export function useChequeDeIngreso(ingreso: Ingreso | undefined): Cheque | undefined {
+  return chequeDeIngreso(ingreso, useCheques())
 }
 
 export function useEgresoActions() {
@@ -603,6 +665,24 @@ export function useEgresoActions() {
   }
 
   return { addEgreso, updateEgreso, removeEgreso, softDeleteEgreso, findDuplicateEgreso, addEgresoConPago, attachChequeAEgreso }
+}
+
+/**
+ * Única implementación de "¿tiene cheque este egreso?" — reemplaza la función
+ * local `chequeDeEgreso()` duplicada entre `EgresosPage`/`EgresoFormPage`. Un
+ * egreso se enlaza indirecto vía `compromisos_pago.cheque_id`, así que además
+ * del cheque devuelve el id del compromiso (lo necesitan `marcarPagado` y
+ * `desvincularChequeDeEgreso`).
+ */
+export function chequeDeEgreso(egreso: Egreso | undefined, cheques: Cheque[], compromisosPago: CompromisoPago[]): { cheque: Cheque; compromisoId: string } | undefined {
+  if (!egreso) return undefined
+  const compromiso = compromisosPago.find(cp => cp.egresoId === egreso.ref && cp.chequeId)
+  if (!compromiso?.chequeId) return undefined
+  const cheque = cheques.find(c => c.id === compromiso.chequeId)
+  return cheque ? { cheque, compromisoId: compromiso.id } : undefined
+}
+export function useChequeDeEgreso(egreso: Egreso | undefined): { cheque: Cheque; compromisoId: string } | undefined {
+  return chequeDeEgreso(egreso, useCheques(), useCompromisosPago())
 }
 
 export interface PagoEgresoInput {
@@ -918,7 +998,19 @@ export function useGastoFijoActions() {
     return { ok: true, gastoFijo }
   }
 
-  return { addGastoFijo, updateGastoFijo, softDeleteGastoFijo, guardarGastoFijoConCheque }
+  /** Desvincular ≠ Anular: solo saca la relación (`chequeId = null`), el cheque real sigue existiendo con su estado intacto. */
+  const desvincularChequeDeGastoFijo = (id: string) => updateGastoFijo(id, { chequeId: null })
+
+  return { addGastoFijo, updateGastoFijo, softDeleteGastoFijo, guardarGastoFijoConCheque, desvincularChequeDeGastoFijo }
+}
+
+/** Única implementación de "¿tiene cheque este gasto fijo?" — reemplaza el lookup inline repetido por página. */
+export function chequeDeGastoFijo(gastoFijo: GastoFijo | undefined, cheques: Cheque[]): Cheque | undefined {
+  if (!gastoFijo?.chequeId) return undefined
+  return cheques.find(c => c.id === gastoFijo.chequeId)
+}
+export function useChequeDeGastoFijo(gastoFijo: GastoFijo | undefined): Cheque | undefined {
+  return chequeDeGastoFijo(gastoFijo, useCheques())
 }
 
 export function useVariacionActions() {
@@ -1094,7 +1186,31 @@ export function useCompromisoPagoActions() {
     return { ok: true }
   }
 
-  return { marcarPagado }
+  /**
+   * Desvincular ≠ Anular: el compromiso de `compromisos_pago` es el evento
+   * financiero real (el que cascadea a caja y el que leen `get_disponible_
+   * financiero`/`get_proyeccion_caja` como obligación PENDIENTE) — no un
+   * simple vínculo técnico del cheque. Por eso solo se saca la referencia
+   * (`cheque_id = null`), nunca se borra el compromiso: la obligación de
+   * pagar sigue en pie, con su `fecha_vencimiento`/`estado`, solo que sin
+   * instrumento asignado. El cheque real tampoco se toca — sigue existiendo
+   * con su estado intacto, ahora huérfano.
+   */
+  const desvincularChequeDeEgreso = async (compromisoId: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const { error } = await supabase.from('compromisos_pago').update({ cheque_id: null, updated_at: new Date().toISOString() }).eq('id', compromisoId)
+    if (error) {
+      logPersistError('desvincularChequeDeEgreso', error)
+      return { ok: false, error: error.message ?? 'No se pudo desvincular el cheque' }
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['porte', 'compromisosPago'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'cheques'] }),
+      queryClient.invalidateQueries({ queryKey: ['porte', 'rpc'] }),
+    ])
+    return { ok: true }
+  }
+
+  return { marcarPagado, desvincularChequeDeEgreso }
 }
 
 /**

@@ -3,7 +3,11 @@ import type { TipoEgreso, Cuenta, TipoCaja } from './config'
 // ─── Egresos (04_EGRESOS) ──────────────────────────────────────────────────────
 // La tab está vacía en el Excel original — datos inventados coherentes con obras y proveedores.
 
-export type EstadoEgreso = 'Confirmado' | 'Pendiente' | 'Emitido' | 'Incompleto'
+// 'Emitido' ya no es seleccionable en ninguna pantalla (ver ChequeAttachDialog
+// / useChequeDeEgreso — la existencia de un cheque la determina el modelo real
+// de `cheques`, no este campo) pero se mantiene en el tipo por compatibilidad
+// de lectura con filas existentes que ya lo tengan guardado.
+export type EstadoEgreso = 'Confirmado' | 'Pendiente' | 'Emitido'
 
 export interface Egreso {
   fecha: string

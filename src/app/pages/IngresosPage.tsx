@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Plus } from 'lucide-react'
+import { Plus, Landmark } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
@@ -10,35 +10,41 @@ import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
+import { ChequeAttachDialog } from '@/components/ChequeAttachDialog'
 import { EntityDetailDialog } from '@/components/EntityDetailDialog'
-import { useIngresos, useVentas, useIngresoActions, useCheques, useChequeActions } from '@/modules/porte/store'
+import { useIngresos, useVentas, useIngresoActions, chequeDeIngreso, useCheques, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { CHEQUE_ESTADO_STYLE, type EstadoIngreso, type Ingreso, type Cheque } from '@/modules/porte'
 
+// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
+// el modelo real (`chequeDeIngreso`), nunca este campo administrativo. Se
+// mantiene en el tipo/estilo solo para que una fila existente con ese valor
+// (de antes de esta migración) siga mostrando un label en vez de romper.
 const ESTADO_INGRESO_STYLE: Record<EstadoIngreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
   Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
   Emitido: { label: 'Cheque emitido', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
 }
-const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente', 'Emitido']
+const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 
 export default function IngresosPage() {
   const navigate = useNavigate()
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const ingresos = useIngresos()
   const ventas = useVentas()
   const cheques = useCheques()
-  const { updateIngreso, softDeleteIngreso } = useIngresoActions()
+  const { updateIngreso, softDeleteIngreso, attachChequeAIngreso } = useIngresoActions()
   const { actualizarEstadoCheque } = useChequeActions()
   const [pendingDelete, setPendingDelete] = useState<Ingreso | null>(null)
   const [pendingCheque, setPendingCheque] = useState<Cheque | null>(null)
+  const [pendingAttach, setPendingAttach] = useState<Ingreso | null>(null)
   const [viewing, setViewing] = useState<Ingreso | null>(null)
   const activos = ingresos.filter(i => i.activo)
   const puedeEditar = can('ingresos:write')
   const puedeEliminar = can('ingresos:delete')
 
-  const viewingCheque = viewing?.chequeId ? cheques.find(c => c.id === viewing.chequeId) : undefined
+  const viewingCheque = chequeDeIngreso(viewing ?? undefined, cheques)
   const irAEditar = (ingreso: Ingreso) => {
     setViewing(null)
     navigate(`/ingresos/nuevo?ref=${encodeURIComponent(ingreso.ref)}`)
@@ -73,7 +79,7 @@ export default function IngresosPage() {
           emptyAction={{ label: 'Nuevo ingreso', onClick: () => navigate('/ingresos/nuevo') }}
           className="lg:grid lg:grid-cols-2 lg:items-start"
           renderItem={ingreso => {
-            const cheque = ingreso.chequeId ? cheques.find(c => c.id === ingreso.chequeId) : undefined
+            const cheque = chequeDeIngreso(ingreso, cheques)
             return (
               <EntityCard
                 title={ingreso.ref}
@@ -105,6 +111,7 @@ export default function IngresosPage() {
                       <CardActionsMenu
                         onEdit={puedeEditar ? () => navigate(`/ingresos/nuevo?ref=${ingreso.ref}`) : undefined}
                         onDelete={puedeEliminar ? () => setPendingDelete(ingreso) : undefined}
+                        extraActions={puedeEditar && !cheque ? [{ label: 'Vincular cheque', icon: Landmark, onClick: () => setPendingAttach(ingreso) }] : undefined}
                       />
                     </div>
                   )
@@ -157,6 +164,22 @@ export default function IngresosPage() {
           const resultado = await actualizarEstadoCheque(pendingCheque.id, nuevoEstado, fecha, cajaId)
           if (!resultado.ok) toast.error(resultado.error)
           else toast.success('Cheque actualizado')
+        }}
+      />
+
+      <ChequeAttachDialog
+        open={!!pendingAttach}
+        direccion="COBRO"
+        onClose={() => setPendingAttach(null)}
+        onConfirm={async data => {
+          if (!pendingAttach || !user) return
+          const resultado = await attachChequeAIngreso(pendingAttach.ref, data, user.id)
+          if (!resultado.ok) {
+            toast.error(resultado.error)
+            return
+          }
+          toast.success('Cheque vinculado')
+          setPendingAttach(null)
         }}
       />
 

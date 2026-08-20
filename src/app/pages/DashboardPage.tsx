@@ -5,20 +5,34 @@ import { MetricCard } from '@/components/MetricCard'
 import { EntityCard } from '@/components/EntityCard'
 import { EntityList } from '@/components/EntityList'
 import { ESTADO_OPERATIVO_CONFIG, getTotalCobrado, getSaldoPendiente } from '@/modules/porte'
-import { useVentas, useIngresos, useEgresos, useCajaActual } from '@/modules/porte/store'
-import { formatCurrency, todayLocal } from '@/lib/format'
+import { useVentas, useIngresos, useCheques, useCajaActual } from '@/modules/porte/store'
+import { formatCurrency, todayLocal, addDaysLocal } from '@/lib/format'
+
+// Estados terminales de un cheque PAGO que ya no cuentan como "pendiente" —
+// centralizado (data/cheques.ts) sería ideal, pero acá alcanza con la lista
+// mínima que pide el KPI: debitado (ya salió), rechazado/anulado (nunca sale).
+const CHEQUE_PAGO_TERMINALES = ['DEBITADO', 'RECHAZADO', 'ANULADO']
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const ventas = useVentas()
   const ingresos = useIngresos()
-  const egresos = useEgresos()
+  const cheques = useCheques()
   const { data: cajaActualRows } = useCajaActual(todayLocal())
 
   const ventasActivas = ventas.filter(v => v.estadoOp !== 'Cerrado')
   const totalACobrar = ventasActivas.reduce((sum, v) => sum + getSaldoPendiente(v, ingresos), 0)
   const cobradoDelMes = ventas.reduce((sum, v) => sum + getTotalCobrado(v.id, ingresos), 0)
-  const chequesPorVencer = egresos.filter(e => e.activo && e.estado === 'Emitido' && e.fechaAcreditacion).length
+  // KPI real: cheques emitidos (PAGO) todavía no terminales, con vencimiento
+  // dentro de los próximos 7 días (hoy inclusive) — lee directo la tabla
+  // `cheques`, nunca el campo cosmético `egreso.estado`. Un cheque no
+  // terminal ya vencido no cuenta acá — "por vencer" es la ventana hacia
+  // adelante, no el historial de vencidos.
+  const hoy = todayLocal()
+  const limite7Dias = addDaysLocal(hoy, 7)
+  const chequesPorVencer = cheques.filter(c =>
+    c.direccion === 'PAGO' && !CHEQUE_PAGO_TERMINALES.includes(c.estado) && c.fechaVencimiento >= hoy && c.fechaVencimiento <= limite7Dias,
+  ).length
   const cajaActualTotal = (cajaActualRows ?? []).reduce((sum, c) => sum + c.saldoActual, 0)
 
   return (

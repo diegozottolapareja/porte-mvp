@@ -14,7 +14,7 @@ import { PillSelect } from '@/components/PillSelect'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
 import { EntityDetailDialog } from '@/components/EntityDetailDialog'
 import { calcDiferencia, CONFIG_LISTS, CHEQUE_ESTADO_STYLE, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja, type Cheque } from '@/modules/porte'
-import { useGastosFijos, useGastoFijoActions, useCajas, useMetodosPago, useCheques, useChequeActions } from '@/modules/porte/store'
+import { useGastosFijos, useGastoFijoActions, useCajas, useMetodosPago, useCheques, chequeDeGastoFijo, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { isNegativeAmount } from '@/lib/validation'
@@ -42,7 +42,7 @@ export default function GastosFijosPage() {
   const puedeEditar = can('gastosfijos:write')
   const puedeEliminar = can('gastosfijos:delete')
 
-  const viewingCheque = viewing?.chequeId ? cheques.find(c => c.id === viewing.chequeId) : undefined
+  const viewingCheque = chequeDeGastoFijo(viewing ?? undefined, cheques)
   const viewingDiferencia = viewing ? calcDiferencia(viewing) : null
 
   const activos = gastosFijos.filter(g => g.activo)
@@ -67,7 +67,7 @@ export default function GastosFijosPage() {
         className="lg:grid lg:grid-cols-2 lg:items-start"
         renderItem={g => {
           const diferencia = calcDiferencia(g)
-          const cheque = g.chequeId ? cheques.find(c => c.id === g.chequeId) : undefined
+          const cheque = chequeDeGastoFijo(g, cheques)
           return (
             <EntityCard
               title={g.concepto}
@@ -183,8 +183,7 @@ export default function GastosFijosPage() {
 
 function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null; onClose: () => void }) {
   const { user } = useAuth()
-  const { addGastoFijo, updateGastoFijo, guardarGastoFijoConCheque } = useGastoFijoActions()
-  const { actualizarEstadoCheque } = useChequeActions()
+  const { addGastoFijo, updateGastoFijo, guardarGastoFijoConCheque, desvincularChequeDeGastoFijo } = useGastoFijoActions()
   const cajas = useCajas()
   const metodosPago = useMetodosPago()
   const cheques = useCheques()
@@ -221,7 +220,7 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
   const metodoSeleccionado = metodosPago.find(m => m.id === metodoPagoId)
   const yaTieneCheque = !!existing?.chequeId
   const esCheque = !yaTieneCheque && metodoSeleccionado?.tipo === 'CHEQUE'
-  const chequeLigado = existing?.chequeId ? cheques.find(c => c.id === existing.chequeId) : undefined
+  const chequeLigado = chequeDeGastoFijo(existing, cheques)
   const chequeYaAvanzado = !!chequeLigado && chequeLigado.estado !== 'EMITIDO'
 
   // Regla de negocio: caja Negra solo admite instrumentos INMEDIATO — mismo
@@ -284,13 +283,7 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
     if (existing) {
       updateGastoFijo(existing.id, payload)
       if (chequeLigado && !chequeYaAvanzado && quitarCheque) {
-        setSaving(true)
-        const resultado = await actualizarEstadoCheque(chequeLigado.id, 'ANULADO', todayLocal())
-        setSaving(false)
-        if (!resultado.ok) {
-          toast.error(resultado.error)
-          return
-        }
+        desvincularChequeDeGastoFijo(existing.id)
       }
       toast.success('Gasto fijo actualizado')
     } else {
@@ -375,6 +368,11 @@ function GastoFijoDialog({ value, onClose }: { value: GastoFijo | 'nuevo' | null
                     <input type="checkbox" checked={!quitarCheque} onChange={e => setQuitarCheque(!e.target.checked)} />
                     Mantener vinculado el cheque
                   </label>
+                )}
+                {!chequeYaAvanzado && quitarCheque && (
+                  <p className="text-xs text-muted-foreground">
+                    Se desvincula del gasto fijo — el cheque sigue existiendo, no se anula.
+                  </p>
                 )}
               </div>
             )}

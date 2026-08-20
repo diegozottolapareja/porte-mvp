@@ -5,28 +5,64 @@ import { AppShell } from '@/components/AppShell'
 import { Field } from '@/components/Field'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { CONFIG_LISTS, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso, type EstadoIngreso, derivarAcreditacionIngreso } from '@/modules/porte'
-import { useVentas, useIngresos, useIngresoActions, useMetodosCobro, useCajas } from '@/modules/porte/store'
+import { LoadingDots } from '@/components/LoadingDots'
+import { CONFIG_LISTS, CHEQUE_ESTADO_STYLE, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso, type EstadoIngreso, derivarAcreditacionIngreso } from '@/modules/porte'
+import { useVentas, useIngresosConEstado, useIngresoActions, useMetodosCobro, useCajas, chequeDeIngreso, useCheques } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
 
-const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente', 'Emitido']
+// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
+// el modelo real (ver `chequeLigado`/`chequeDeIngreso`), nunca este campo.
+const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 
+// Gate de carga: en una navegación en frío (F5 / deep link a `?ref=IN-XXXX`),
+// `useIngresosConEstado()` puede resolver después del primer render. Si el
+// form interior montara ya con `ingresos === []`, sus
+// `useState(editing?.campo ?? default)` capturarían el default para siempre
+// (el inicializador de useState solo corre una vez). Este componente exterior
+// no monta `IngresoForm` hasta que la query terminó — mismo criterio que
+// `EgresoFormPage`.
 export default function IngresoFormPage() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const editRef = searchParams.get('ref')
+  const { data: ingresos, isPending } = useIngresosConEstado()
+
+  if (editRef && isPending) {
+    return (
+      <AppShell title="Editar ingreso" onBack={() => navigate(-1)}>
+        <div className="py-16 flex justify-center"><LoadingDots /></div>
+      </AppShell>
+    )
+  }
+
+  const editing = editRef ? ingresos.find(i => i.ref === editRef) : undefined
+  if (editRef && !editing) {
+    return (
+      <AppShell title="Ingreso no encontrado" onBack={() => navigate(-1)}>
+        <p className="text-sm text-muted-foreground text-center py-16">No se encontró el ingreso {editRef}.</p>
+      </AppShell>
+    )
+  }
+
+  return <IngresoForm key={editRef ?? 'nuevo'} editing={editing} />
+}
+
+function IngresoForm({ editing }: { editing: Ingreso | undefined }) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const ventas = useVentas()
-  const ingresos = useIngresos()
   const metodosCobro = useMetodosCobro()
   const cajas = useCajas()
-  const { addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso, addIngresoConCheque } = useIngresoActions()
+  const cheques = useCheques()
+  const { addIngreso, updateIngreso, removeIngreso, findDuplicateIngreso, addIngresoConCheque, desvincularChequeDeIngreso } = useIngresoActions()
   const [searchParams] = useSearchParams()
-  const editRef = searchParams.get('ref')
+  const editRef = editing?.ref ?? null
   const obraIdParam = searchParams.get('obraId')
-  const editing = editRef ? ingresos.find(i => i.ref === editRef) : undefined
   // Si viene desde la ficha de venta, guardar tiene que volver ahí para ver el ingreso listado.
   const volverA = obraIdParam ? `/ventas/${encodeURIComponent(obraIdParam)}` : undefined
+  const chequeLigado = chequeDeIngreso(editing, cheques)
 
   const [fecha, setFecha] = useState(editing?.fecha ?? todayLocal())
   const [obraId, setObraId] = useState(editing?.id ?? obraIdParam ?? '')
@@ -43,6 +79,7 @@ export default function IngresoFormPage() {
   const [chequeBanco, setChequeBanco] = useState('')
   const [chequeNumero, setChequeNumero] = useState('')
   const [chequeFechaVencimiento, setChequeFechaVencimiento] = useState('')
+  const [desvincularCheque, setDesvincularCheque] = useState(false)
   const [pendingDuplicate, setPendingDuplicate] = useState<Ingreso | null>(null)
   const [pendingLoadAnother, setPendingLoadAnother] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -71,7 +108,7 @@ export default function IngresoFormPage() {
   }, [metodoSeleccionado, esCheque, fecha, monto])
   const cajaDestino = metodoSeleccionado?.cajaId ? cajas.find(c => c.id === metodoSeleccionado.cajaId) : undefined
 
-  const doSaveEditing = (montoNum: number) => {
+  const doSaveEditing = async (montoNum: number) => {
     if (!user || !editing) return
     updateIngreso(editing.ref, {
       fecha, id: obraId, tipoIngreso, concepto, monto: montoNum,
@@ -85,6 +122,11 @@ export default function IngresoFormPage() {
       ...(editing.chequeId ? {} : { metodoCobroId: metodoCobroId || undefined, fechaAcreditacion: derivado?.fechaAcreditacion }),
     })
     // TODO: reemplazar con api.put(`/ingresos/${editing.ref}`, { ... })
+
+    if (chequeLigado && chequeLigado.estado === 'EN_CARTERA' && desvincularCheque) {
+      desvincularChequeDeIngreso(editing.ref)
+    }
+
     toast.success('Ingreso actualizado')
     navigate(volverA ?? '/mis-registros')
   }
@@ -151,7 +193,7 @@ export default function IngresoFormPage() {
       setPendingLoadAnother(loadAnother)
       return
     }
-    if (editing) doSaveEditing(montoNum)
+    if (editing) void doSaveEditing(montoNum)
     else void doSaveNuevo(loadAnother, montoNum)
   }
 
@@ -218,6 +260,36 @@ export default function IngresoFormPage() {
                   {e}
                 </button>
               ))}
+            </div>
+          </Field>
+        )}
+
+        {editing && chequeLigado && (
+          <Field label="Cheque" className="lg:col-span-2">
+            <div className="p-4 rounded-2xl border border-border bg-muted/40 space-y-2">
+              <p className="text-sm font-medium">
+                Cheque vinculado: {CHEQUE_ESTADO_STYLE[chequeLigado.estado].label}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {chequeLigado.banco || 'Sin banco'}{chequeLigado.numero ? ` · Nº ${chequeLigado.numero}` : ''} · Vto. {formatDate(chequeLigado.fechaVencimiento)}
+              </p>
+              {chequeLigado.estado !== 'EN_CARTERA' ? (
+                <p className="text-xs text-muted-foreground">
+                  Este cheque ya está "{CHEQUE_ESTADO_STYLE[chequeLigado.estado].label}" — para anularlo, cambiá su estado desde la tarjeta del ingreso.
+                </p>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={!desvincularCheque} onChange={e => setDesvincularCheque(!e.target.checked)} />
+                    Mantener vinculado el cheque
+                  </label>
+                  {desvincularCheque && (
+                    <p className="text-xs text-muted-foreground">
+                      Se desvincula del ingreso — el cheque sigue existiendo, no se anula.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           </Field>
         )}
@@ -291,7 +363,7 @@ export default function IngresoFormPage() {
           setPendingDuplicate(null)
           const montoNum = toPositiveAmount(monto)
           if (!montoNum) return
-          if (editing) doSaveEditing(montoNum)
+          if (editing) void doSaveEditing(montoNum)
           else void doSaveNuevo(pendingLoadAnother, montoNum)
         }}
       />

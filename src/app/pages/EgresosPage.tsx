@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Plus, Clock3 } from 'lucide-react'
+import { Plus, Clock3, Landmark } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EntityList } from '@/components/EntityList'
@@ -12,18 +12,21 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
 import { ChequeAttachDialog } from '@/components/ChequeAttachDialog'
 import { EntityDetailDialog } from '@/components/EntityDetailDialog'
-import { useEgresos, useVentas, useEgresoActions, useCheques, useCompromisosPago, useCompromisoPagoActions, useChequeActions } from '@/modules/porte/store'
+import { useEgresos, useVentas, useEgresoActions, chequeDeEgreso, useCompromisosPago, useCompromisoPagoActions, useChequeActions, useCheques } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { CHEQUE_ESTADO_STYLE, chequeImpactaCaja, type EstadoEgreso, type Egreso, type Cheque } from '@/modules/porte'
 
+// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
+// el modelo real (`useChequeDeEgreso`), nunca este campo administrativo. Se
+// mantiene en el tipo/estilo solo para que una fila existente con ese valor
+// (de antes de esta migración) siga mostrando un label en vez de romper.
 const ESTADO_STYLE: Record<EstadoEgreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
   Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
   Emitido: { label: 'Cheque emitido', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
-  Incompleto: { label: 'Incompleto', color: 'text-orange-700', bgColor: 'bg-orange-100' },
 }
-const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
+const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente']
 
 export default function EgresosPage() {
   const navigate = useNavigate()
@@ -43,16 +46,7 @@ export default function EgresosPage() {
   const puedeEditar = can('egresos:write')
   const puedeEliminar = can('egresos:delete')
 
-  // Un egreso puede tener 1..N compromisos_pago (sección 6 del pedido) — acá
-  // solo interesa el que trae un cheque asociado, si hay alguno.
-  const chequeDeEgreso = (egreso: Egreso): { cheque: Cheque; compromisoId: string } | undefined => {
-    const compromiso = compromisosPago.find(cp => cp.egresoId === egreso.ref && cp.chequeId)
-    if (!compromiso?.chequeId) return undefined
-    const cheque = cheques.find(c => c.id === compromiso.chequeId)
-    return cheque ? { cheque, compromisoId: compromiso.id } : undefined
-  }
-
-  const viewingChequeInfo = viewing ? chequeDeEgreso(viewing) : undefined
+  const viewingChequeInfo = chequeDeEgreso(viewing ?? undefined, cheques, compromisosPago)
   const irAEditar = (egreso: Egreso) => {
     setViewing(null)
     navigate(`/egresos/nuevo?ref=${encodeURIComponent(egreso.ref)}`)
@@ -91,7 +85,7 @@ export default function EgresosPage() {
           emptyAction={{ label: 'Nuevo egreso', onClick: () => navigate('/egresos/nuevo') }}
           className="lg:grid lg:grid-cols-2 lg:items-start"
           renderItem={egreso => {
-            const chequeInfo = chequeDeEgreso(egreso)
+            const chequeInfo = chequeDeEgreso(egreso, cheques, compromisosPago)
             return (
               <EntityCard
                 title={egreso.ref}
@@ -103,10 +97,7 @@ export default function EgresosPage() {
                       value={egreso.estado}
                       options={ESTADOS_EGRESO}
                       style={v => ESTADO_STYLE[v]}
-                      onChange={estado => {
-                        if (estado === 'Emitido' && !chequeInfo) setPendingAttach(egreso)
-                        else updateEgreso(egreso.ref, { estado })
-                      }}
+                      onChange={estado => updateEgreso(egreso.ref, { estado })}
                     />
                   ) : (
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
@@ -126,6 +117,7 @@ export default function EgresosPage() {
                       <CardActionsMenu
                         onEdit={puedeEditar ? () => navigate(`/egresos/nuevo?ref=${egreso.ref}`) : undefined}
                         onDelete={puedeEliminar ? () => setPendingDelete(egreso) : undefined}
+                        extraActions={puedeEditar && !chequeInfo ? [{ label: 'Vincular cheque', icon: Landmark, onClick: () => setPendingAttach(egreso) }] : undefined}
                       />
                     </div>
                   )
@@ -189,6 +181,7 @@ export default function EgresosPage() {
 
       <ChequeAttachDialog
         open={!!pendingAttach}
+        direccion="PAGO"
         onClose={() => setPendingAttach(null)}
         onConfirm={async data => {
           if (!pendingAttach || !user) return
@@ -197,7 +190,6 @@ export default function EgresosPage() {
             toast.error(resultado.error)
             return
           }
-          updateEgreso(pendingAttach.ref, { estado: 'Emitido' })
           toast.success('Cheque vinculado')
           setPendingAttach(null)
         }}

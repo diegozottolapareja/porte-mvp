@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react'
 import { MoreVertical, Pencil, Trash2 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -6,15 +7,24 @@ import {
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu'
 
+interface CardActionsMenuExtraAction {
+  label: string
+  icon: ComponentType<{ className?: string }>
+  onClick: () => void
+}
+
 interface CardActionsMenuProps {
   onEdit?: () => void
   onDelete?: () => void
   editLabel?: string
   deleteLabel?: string
+  // Acciones adicionales entre Editar y Eliminar (ej. "Vincular cheque") —
+  // genérico para no atar este componente compartido a un dominio puntual.
+  extraActions?: CardActionsMenuExtraAction[]
 }
 
-export function CardActionsMenu({ onEdit, onDelete, editLabel = 'Editar', deleteLabel = 'Eliminar' }: CardActionsMenuProps) {
-  if (!onEdit && !onDelete) return null
+export function CardActionsMenu({ onEdit, onDelete, editLabel = 'Editar', deleteLabel = 'Eliminar', extraActions }: CardActionsMenuProps) {
+  if (!onEdit && !onDelete && !extraActions?.length) return null
 
   return (
     <DropdownMenu>
@@ -34,6 +44,12 @@ export function CardActionsMenu({ onEdit, onDelete, editLabel = 'Editar', delete
             {editLabel}
           </DropdownMenuItem>
         )}
+        {extraActions?.map(action => (
+          <DropdownMenuItem key={action.label} onSelect={action.onClick}>
+            <action.icon className="w-4 h-4" />
+            {action.label}
+          </DropdownMenuItem>
+        ))}
         {onDelete && (
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>
             <Trash2 className="w-4 h-4" />
