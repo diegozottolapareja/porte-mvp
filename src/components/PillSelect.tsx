@@ -18,6 +18,7 @@ export function PillSelect<T extends string>({ value, options, style, onChange, 
     <Select value={value} onValueChange={v => onChange(v as T)}>
       <SelectTrigger
         size="sm"
+        onClick={e => e.stopPropagation()}
         className={`h-auto w-auto shrink-0 gap-1 rounded-full border-0 px-2 py-0.5 text-xs font-medium shadow-none focus-visible:ring-1 [&_svg]:size-3 ${current.color} ${current.bgColor} ${className}`}
       >
         {current.label}

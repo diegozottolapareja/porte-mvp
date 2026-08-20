@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/app/components/ui/button'
 import { PillSelect } from '@/components/PillSelect'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
+import { EntityDetailDialog } from '@/components/EntityDetailDialog'
 import { calcDiferencia, CONFIG_LISTS, CHEQUE_ESTADO_STYLE, type GastoFijo, type CategGastoFijo, type Periodicidad, type EstadoGastoFijo, type Cuenta, type TipoCaja, type Cheque } from '@/modules/porte'
 import { useGastosFijos, useGastoFijoActions, useCajas, useMetodosPago, useCheques, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
@@ -37,8 +38,12 @@ export default function GastosFijosPage() {
   const [editing, setEditing] = useState<GastoFijo | 'nuevo' | null>(null)
   const [pendingDelete, setPendingDelete] = useState<GastoFijo | null>(null)
   const [pendingCheque, setPendingCheque] = useState<Cheque | null>(null)
+  const [viewing, setViewing] = useState<GastoFijo | null>(null)
   const puedeEditar = can('gastosfijos:write')
   const puedeEliminar = can('gastosfijos:delete')
+
+  const viewingCheque = viewing?.chequeId ? cheques.find(c => c.id === viewing.chequeId) : undefined
+  const viewingDiferencia = viewing ? calcDiferencia(viewing) : null
 
   const activos = gastosFijos.filter(g => g.activo)
 
@@ -67,6 +72,7 @@ export default function GastosFijosPage() {
             <EntityCard
               title={g.concepto}
               subtitle={`${g.categoria} · ${g.periodicidad} · ${formatDate(g.fecha)}`}
+              onClick={() => setViewing(g)}
               statusNode={
                 <div className="flex items-center gap-1.5">
                   {puedeEditar ? (
@@ -116,6 +122,32 @@ export default function GastosFijosPage() {
             />
           )
         }}
+      />
+
+      <EntityDetailDialog
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        title={viewing?.concepto ?? ''}
+        subtitle={viewing ? `${viewing.categoria} · ${viewing.periodicidad} · ${formatDate(viewing.fecha)}` : undefined}
+        statusNode={viewing && (
+          viewingCheque ? (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].color} ${CHEQUE_ESTADO_STYLE[viewingCheque.estado].bgColor}`}>
+              Cheque: {CHEQUE_ESTADO_STYLE[viewingCheque.estado].label}
+            </span>
+          ) : (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[viewing.estado].color} ${ESTADO_STYLE[viewing.estado].bgColor}`}>{viewing.estado}</span>
+          )
+        )}
+        fields={viewing ? [
+          { label: 'Previsto', value: formatCurrency(viewing.montoPrevisto) },
+          { label: 'Real', value: viewing.montoReal === null ? '—' : formatCurrency(viewing.montoReal) },
+          { label: 'Diferencia', value: viewingDiferencia === null ? '—' : formatCurrency(viewingDiferencia) },
+          { label: 'Cuenta', value: viewing.cuenta },
+          { label: 'Caja', value: viewing.tipoCaja },
+          ...(viewingCheque ? [{ label: 'Vto. cheque', value: formatDate(viewingCheque.fechaVencimiento) }] : []),
+          ...(viewing.observaciones ? [{ label: 'Observaciones', value: viewing.observaciones }] : []),
+        ] : []}
+        onEdit={viewing && puedeEditar ? () => { const g = viewing; setViewing(null); setEditing(g) } : undefined}
       />
 
       <GastoFijoDialog

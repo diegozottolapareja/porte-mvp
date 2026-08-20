@@ -10,6 +10,7 @@ import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
+import { EntityDetailDialog } from '@/components/EntityDetailDialog'
 import { useIngresos, useVentas, useIngresoActions, useCheques, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
@@ -31,9 +32,16 @@ export default function IngresosPage() {
   const { actualizarEstadoCheque } = useChequeActions()
   const [pendingDelete, setPendingDelete] = useState<Ingreso | null>(null)
   const [pendingCheque, setPendingCheque] = useState<Cheque | null>(null)
+  const [viewing, setViewing] = useState<Ingreso | null>(null)
   const activos = ingresos.filter(i => i.activo)
   const puedeEditar = can('ingresos:write')
   const puedeEliminar = can('ingresos:delete')
+
+  const viewingCheque = viewing?.chequeId ? cheques.find(c => c.id === viewing.chequeId) : undefined
+  const irAEditar = (ingreso: Ingreso) => {
+    setViewing(null)
+    navigate(`/ingresos/nuevo?ref=${encodeURIComponent(ingreso.ref)}`)
+  }
 
   const totalPeriodo = activos
     .filter(i => i.estado === 'Confirmado')
@@ -69,7 +77,7 @@ export default function IngresosPage() {
               <EntityCard
                 title={ingreso.concepto}
                 subtitle={`${ingreso.id} · ${formatDate(ingreso.fecha)}`}
-                onClick={() => navigate(`/ventas/${encodeURIComponent(ingreso.id)}?tab=ingresos&ref=${encodeURIComponent(ingreso.ref)}`)}
+                onClick={() => setViewing(ingreso)}
                 statusNode={
                   <div className="flex items-center gap-1.5">
                     {puedeEditar ? (
@@ -115,6 +123,28 @@ export default function IngresosPage() {
           }}
         />
       </div>
+
+      <EntityDetailDialog
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        title={viewing?.concepto ?? ''}
+        subtitle={viewing ? `${viewing.id} · ${formatDate(viewing.fecha)}` : undefined}
+        statusNode={viewing && (
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_INGRESO_STYLE[viewing.estado].color} ${ESTADO_INGRESO_STYLE[viewing.estado].bgColor}`}>
+            {ESTADO_INGRESO_STYLE[viewing.estado].label}
+          </span>
+        )}
+        fields={viewing ? [
+          { label: 'Referencia', value: viewing.ref },
+          { label: 'Monto', value: formatCurrency(viewing.monto) },
+          { label: 'Venta', value: `${viewing.id} · ${ventas.find(v => v.id === viewing.id)?.cliente ?? '—'}` },
+          { label: 'Tipo de ingreso', value: viewing.tipoIngreso },
+          { label: 'Cuenta', value: viewing.cuenta },
+          { label: 'Caja', value: viewing.caja },
+          ...(viewingCheque ? [{ label: 'Vto. cheque', value: formatDate(viewingCheque.fechaVencimiento) }] : []),
+        ] : []}
+        onEdit={viewing && puedeEditar ? () => irAEditar(viewing) : undefined}
+      />
 
       <ChequeEstadoDialog
         cheque={pendingCheque}

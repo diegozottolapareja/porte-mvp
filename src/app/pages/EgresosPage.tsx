@@ -10,6 +10,7 @@ import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
+import { EntityDetailDialog } from '@/components/EntityDetailDialog'
 import { useEgresos, useVentas, useEgresoActions, useCheques, useCompromisosPago, useCompromisoPagoActions, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
@@ -35,6 +36,7 @@ export default function EgresosPage() {
   const { actualizarEstadoCheque } = useChequeActions()
   const [pendingDelete, setPendingDelete] = useState<Egreso | null>(null)
   const [pendingCheque, setPendingCheque] = useState<{ cheque: Cheque; compromisoId: string } | null>(null)
+  const [viewing, setViewing] = useState<Egreso | null>(null)
   const activos = egresos.filter(e => e.activo)
   const puedeEditar = can('egresos:write')
   const puedeEliminar = can('egresos:delete')
@@ -46,6 +48,12 @@ export default function EgresosPage() {
     if (!compromiso?.chequeId) return undefined
     const cheque = cheques.find(c => c.id === compromiso.chequeId)
     return cheque ? { cheque, compromisoId: compromiso.id } : undefined
+  }
+
+  const viewingChequeInfo = viewing ? chequeDeEgreso(viewing) : undefined
+  const irAEditar = (egreso: Egreso) => {
+    setViewing(null)
+    navigate(`/egresos/nuevo?ref=${encodeURIComponent(egreso.ref)}`)
   }
 
   const chequesPendientes = cheques.filter(c => c.direccion === 'PAGO' && !chequeImpactaCaja(c.estado) && c.estado !== 'RECHAZADO' && c.estado !== 'ANULADO')
@@ -86,10 +94,7 @@ export default function EgresosPage() {
               <EntityCard
                 title={egreso.tipoEgreso}
                 subtitle={`${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
-                onClick={() => navigate(egreso.id
-                  ? `/ventas/${encodeURIComponent(egreso.id)}?tab=egresos&ref=${encodeURIComponent(egreso.ref)}`
-                  : `/egresos/nuevo?ref=${encodeURIComponent(egreso.ref)}`
-                )}
+                onClick={() => setViewing(egreso)}
                 statusNode={
                   chequeInfo ? (
                     // Con un Cheque real vinculado, su estado (más granular:
@@ -136,6 +141,35 @@ export default function EgresosPage() {
           }}
         />
       </div>
+
+      <EntityDetailDialog
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        title={viewing?.tipoEgreso ?? ''}
+        subtitle={viewing ? `${viewing.id ?? 'Gasto fijo'} · ${formatDate(viewing.fecha)}` : undefined}
+        statusNode={viewing && (
+          viewingChequeInfo ? (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].bgColor}`}>
+              Cheque: {CHEQUE_ESTADO_STYLE[viewingChequeInfo.cheque.estado].label}
+            </span>
+          ) : (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[viewing.estado].color} ${ESTADO_STYLE[viewing.estado].bgColor}`}>
+              {ESTADO_STYLE[viewing.estado].label}
+            </span>
+          )
+        )}
+        fields={viewing ? [
+          { label: 'Referencia', value: viewing.ref },
+          { label: 'Monto', value: formatCurrency(viewing.monto) },
+          { label: 'Venta', value: viewing.id ? `${viewing.id} · ${ventas.find(v => v.id === viewing.id)?.cliente ?? '—'}` : 'Gasto fijo' },
+          { label: 'Proveedor', value: viewing.proveedor ?? '—' },
+          { label: 'Categoría', value: viewing.categoria },
+          { label: 'Cuenta', value: viewing.cuenta },
+          { label: 'Caja', value: viewing.caja },
+          ...(viewingChequeInfo ? [{ label: 'Vto. cheque', value: formatDate(viewingChequeInfo.cheque.fechaVencimiento) }] : []),
+        ] : []}
+        onEdit={viewing && puedeEditar ? () => irAEditar(viewing) : undefined}
+      />
 
       <ChequeEstadoDialog
         cheque={pendingCheque?.cheque ?? null}
