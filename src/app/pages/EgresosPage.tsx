@@ -10,6 +10,7 @@ import { MovimientosTabs } from '@/components/MovimientosTabs'
 import { PillSelect } from '@/components/PillSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
+import { ChequeAttachDialog } from '@/components/ChequeAttachDialog'
 import { EntityDetailDialog } from '@/components/EntityDetailDialog'
 import { useEgresos, useVentas, useEgresoActions, useCheques, useCompromisosPago, useCompromisoPagoActions, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
@@ -26,16 +27,17 @@ const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 
 export default function EgresosPage() {
   const navigate = useNavigate()
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const egresos = useEgresos()
   const ventas = useVentas()
   const cheques = useCheques()
   const compromisosPago = useCompromisosPago()
-  const { updateEgreso, softDeleteEgreso } = useEgresoActions()
+  const { updateEgreso, softDeleteEgreso, attachChequeAEgreso } = useEgresoActions()
   const { marcarPagado } = useCompromisoPagoActions()
   const { actualizarEstadoCheque } = useChequeActions()
   const [pendingDelete, setPendingDelete] = useState<Egreso | null>(null)
   const [pendingCheque, setPendingCheque] = useState<{ cheque: Cheque; compromisoId: string } | null>(null)
+  const [pendingAttach, setPendingAttach] = useState<Egreso | null>(null)
   const [viewing, setViewing] = useState<Egreso | null>(null)
   const activos = egresos.filter(e => e.activo)
   const puedeEditar = can('egresos:write')
@@ -101,7 +103,10 @@ export default function EgresosPage() {
                       value={egreso.estado}
                       options={ESTADOS_EGRESO}
                       style={v => ESTADO_STYLE[v]}
-                      onChange={estado => updateEgreso(egreso.ref, { estado })}
+                      onChange={estado => {
+                        if (estado === 'Emitido' && !chequeInfo) setPendingAttach(egreso)
+                        else updateEgreso(egreso.ref, { estado })
+                      }}
                     />
                   ) : (
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
@@ -179,6 +184,22 @@ export default function EgresosPage() {
             : await actualizarEstadoCheque(pendingCheque.cheque.id, nuevoEstado, fecha, cajaId)
           if (!resultado.ok) toast.error(resultado.error)
           else toast.success('Cheque actualizado')
+        }}
+      />
+
+      <ChequeAttachDialog
+        open={!!pendingAttach}
+        onClose={() => setPendingAttach(null)}
+        onConfirm={async data => {
+          if (!pendingAttach || !user) return
+          const resultado = await attachChequeAEgreso(pendingAttach.ref, data, user.id)
+          if (!resultado.ok) {
+            toast.error(resultado.error)
+            return
+          }
+          updateEgreso(pendingAttach.ref, { estado: 'Emitido' })
+          toast.success('Cheque vinculado')
+          setPendingAttach(null)
         }}
       />
 
