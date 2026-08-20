@@ -2,7 +2,7 @@ import type { TipoIngreso, Cuenta, TipoCaja } from './config'
 
 // ─── Ingresos (03_INGRESOS) ────────────────────────────────────────────────────
 
-export type EstadoIngreso = 'Confirmado' | 'Pendiente'
+export type EstadoIngreso = 'Confirmado' | 'Pendiente' | 'Emitido'
 
 export interface Ingreso {
   fecha: string        // YYYY-MM-DD

@@ -92,8 +92,8 @@ export default function EgresosPage() {
             const chequeInfo = chequeDeEgreso(egreso)
             return (
               <EntityCard
-                title={egreso.tipoEgreso}
-                subtitle={`${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
+                title={egreso.ref}
+                subtitle={`${egreso.tipoEgreso} · ${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
                 onClick={() => setViewing(egreso)}
                 statusNode={
                   puedeEditar ? (
@@ -134,15 +134,14 @@ export default function EgresosPage() {
       <EntityDetailDialog
         open={!!viewing}
         onClose={() => setViewing(null)}
-        title={viewing?.tipoEgreso ?? ''}
-        subtitle={viewing ? `${viewing.id ?? 'Gasto fijo'} · ${formatDate(viewing.fecha)}` : undefined}
+        title={viewing?.ref ?? ''}
+        subtitle={viewing ? `${viewing.tipoEgreso} · ${viewing.id ?? 'Gasto fijo'} · ${formatDate(viewing.fecha)}` : undefined}
         statusNode={viewing && (
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[viewing.estado].color} ${ESTADO_STYLE[viewing.estado].bgColor}`}>
             {ESTADO_STYLE[viewing.estado].label}
           </span>
         )}
         fields={viewing ? [
-          { label: 'Referencia', value: viewing.ref },
           { label: 'Monto', value: formatCurrency(viewing.monto) },
           { label: 'Venta', value: viewing.id ? `${viewing.id} · ${ventas.find(v => v.id === viewing.id)?.cliente ?? '—'}` : 'Gasto fijo' },
           { label: 'Proveedor', value: viewing.proveedor ?? '—' },

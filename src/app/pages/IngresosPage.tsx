@@ -19,8 +19,9 @@ import { CHEQUE_ESTADO_STYLE, type EstadoIngreso, type Ingreso, type Cheque } fr
 const ESTADO_INGRESO_STYLE: Record<EstadoIngreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
   Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
+  Emitido: { label: 'Cheque emitido', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
 }
-const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
+const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 
 export default function IngresosPage() {
   const navigate = useNavigate()
@@ -75,8 +76,8 @@ export default function IngresosPage() {
             const cheque = ingreso.chequeId ? cheques.find(c => c.id === ingreso.chequeId) : undefined
             return (
               <EntityCard
-                title={ingreso.concepto}
-                subtitle={`${ingreso.id} · ${formatDate(ingreso.fecha)}`}
+                title={ingreso.ref}
+                subtitle={`${ingreso.concepto} · ${ingreso.id} · ${formatDate(ingreso.fecha)}`}
                 onClick={() => setViewing(ingreso)}
                 statusNode={
                   puedeEditar ? (
@@ -117,15 +118,14 @@ export default function IngresosPage() {
       <EntityDetailDialog
         open={!!viewing}
         onClose={() => setViewing(null)}
-        title={viewing?.concepto ?? ''}
-        subtitle={viewing ? `${viewing.id} · ${formatDate(viewing.fecha)}` : undefined}
+        title={viewing?.ref ?? ''}
+        subtitle={viewing ? `${viewing.concepto} · ${viewing.id} · ${formatDate(viewing.fecha)}` : undefined}
         statusNode={viewing && (
           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_INGRESO_STYLE[viewing.estado].color} ${ESTADO_INGRESO_STYLE[viewing.estado].bgColor}`}>
             {ESTADO_INGRESO_STYLE[viewing.estado].label}
           </span>
         )}
         fields={viewing ? [
-          { label: 'Referencia', value: viewing.ref },
           { label: 'Monto', value: formatCurrency(viewing.monto) },
           { label: 'Venta', value: `${viewing.id} · ${ventas.find(v => v.id === viewing.id)?.cliente ?? '—'}` },
           { label: 'Tipo de ingreso', value: viewing.tipoIngreso },

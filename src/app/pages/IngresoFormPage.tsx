@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
 
-const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
+const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 
 export default function IngresoFormPage() {
   const navigate = useNavigate()
