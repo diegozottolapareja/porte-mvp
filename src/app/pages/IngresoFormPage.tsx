@@ -5,11 +5,13 @@ import { AppShell } from '@/components/AppShell'
 import { Field } from '@/components/Field'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { CONFIG_LISTS, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso, derivarAcreditacionIngreso } from '@/modules/porte'
+import { CONFIG_LISTS, type TipoIngreso, type Cuenta, type TipoCaja, type Ingreso, type EstadoIngreso, derivarAcreditacionIngreso } from '@/modules/porte'
 import { useVentas, useIngresos, useIngresoActions, useMetodosCobro, useCajas } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
+
+const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 
 export default function IngresoFormPage() {
   const navigate = useNavigate()
@@ -32,6 +34,7 @@ export default function IngresoFormPage() {
   const [concepto, setConcepto] = useState(editing?.concepto ?? '')
   const [monto, setMonto] = useState(editing?.monto.toString() ?? '')
   const [caja, setCaja] = useState<TipoCaja>(editing?.caja ?? 'BLANCA')
+  const [estado, setEstado] = useState<EstadoIngreso>(editing?.estado ?? 'Confirmado')
   const [metodoCobroId, setMetodoCobroId] = useState(editing?.metodoCobroId ?? '')
   // Cheque como medio de cobro (sección "Ingresos con cheque" del pedido):
   // solo para ingresos nuevos, mismo criterio que el bloque CHEQUE de
@@ -75,6 +78,7 @@ export default function IngresoFormPage() {
       cuenta: (cajaDestino?.nombre as Cuenta | undefined) ?? CONFIG_LISTS.CUENTAS[0],
       caja: (cajaDestino?.tipoCaja as TipoCaja | undefined) ?? caja,
       cajaId: cajaDestino?.id ?? undefined,
+      estado,
       // Un ingreso ya cargado con cheque mantiene su fechaAcreditacion/chequeId
       // tal cual — se actualizan solo desde el flujo de estado del cheque,
       // nunca reescribiéndolos acá.
@@ -200,6 +204,23 @@ export default function IngresoFormPage() {
             ))}
           </div>
         </Field>
+
+        {editing && (
+          <Field label="Estado">
+            <div className="flex gap-2">
+              {ESTADOS_INGRESO.map(e => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => setEstado(e)}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm ${estado === e ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
 
         <Field label="Método de cobro" className="lg:col-span-2">
           <div className="flex gap-2 flex-wrap">

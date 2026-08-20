@@ -23,7 +23,12 @@ export function MetricCard({ label, value, change, positive, Icon, gradient = 'f
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <p className="text-white/70 text-xs font-medium uppercase tracking-wide mb-1">{label}</p>
-          <p className="text-2xl font-bold truncate">{value}</p>
+          {/* Montos financieros grandes (ej. "$ 39.000.000,00") no entran en
+              una sola línea en una tarjeta de mobile en grid-cols-2 —
+              `truncate` los cortaba con "..." haciéndolos ilegibles. Se
+              prioriza que el valor completo sea legible sobre mantenerlo en
+              una sola línea. */}
+          <p className="text-xl md:text-2xl font-bold leading-tight break-words">{value}</p>
           {change && (
             <div className="flex items-center gap-1 mt-1">
               {positive !== undefined && (

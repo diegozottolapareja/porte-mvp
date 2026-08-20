@@ -6,7 +6,7 @@ import { AppShell } from '@/components/AppShell'
 import { Field } from '@/components/Field'
 import { SearchableSelect } from '@/components/SearchableSelect'
 import { ConfirmModal } from '@/components/ConfirmModal'
-import { CONFIG_LISTS, type TipoEgreso, type Cuenta, type TipoCaja, type Egreso } from '@/modules/porte'
+import { CONFIG_LISTS, type TipoEgreso, type Cuenta, type TipoCaja, type Egreso, type EstadoEgreso } from '@/modules/porte'
 import { useVentas, useProveedores, useEgresos, useEgresoActions, useMetodosPago, useTarjetas, useCajas, type PagoEgresoInput } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal, addDaysLocal } from '@/lib/format'
@@ -16,6 +16,10 @@ import { supabase } from '@/lib/supabaseClient'
 // Categoría directa/indirecta puede repetirse entre las dos listas (ej.
 // SERVICIOS, HERRAMIENTAS) — se muestran una sola vez.
 const CATEGORIAS_EGRESO = [...new Set([...CONFIG_LISTS.CATEG_DIRECTOS, ...CONFIG_LISTS.CATEG_INDIRECTOS])]
+// "Incompleto" no es seleccionable a mano — mismo criterio que la pill de
+// EgresosPage.tsx: es un estado derivado (ver validación de duplicados), no
+// una transición manual válida.
+const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente', 'Emitido']
 
 export default function EgresoFormPage() {
   const navigate = useNavigate()
@@ -51,6 +55,7 @@ export default function EgresoFormPage() {
   // Edición de un egreso ya cargado: mantiene el flag legacy tal cual estaba
   // (no se reinterpretan egresos viejos como si tuvieran un método de pago
   // nuevo — ver comentario de la sección "¿Cómo se paga?" más abajo).
+  const [estado, setEstado] = useState<EstadoEgreso>(editing?.estado ?? 'Confirmado')
   const [esCheque, setEsCheque] = useState(!!editing?.fechaEmision)
   const [fechaEmision, setFechaEmision] = useState(editing?.fechaEmision ?? '')
   const [fechaAcreditacionLegacy, setFechaAcreditacionLegacy] = useState(editing?.fechaAcreditacion ?? '')
@@ -102,7 +107,7 @@ export default function EgresoFormPage() {
     updateEgreso(editing.ref, {
       fecha, id: obraId || undefined, proveedor: proveedorId || undefined, tipoEgreso, categoria,
       monto: montoNum, cuenta, caja: cajaTipo, cajaId: cajaSeleccionada?.id,
-      estado: esCheque ? 'Emitido' as const : 'Confirmado' as const,
+      estado,
       fechaEmision: esCheque ? fechaEmision : undefined,
       fechaAcreditacion: esCheque ? fechaAcreditacionLegacy : undefined,
     })
@@ -290,6 +295,21 @@ export default function EgresoFormPage() {
 
         {editing ? (
           <div className="lg:col-span-2 space-y-4">
+            <Field label="Estado">
+              <div className="flex gap-2">
+                {ESTADOS_EGRESO.map(e => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => setEstado(e)}
+                    className={`flex-1 py-2.5 rounded-xl border text-sm ${estado === e ? 'bg-primary text-white border-primary' : 'bg-white border-border text-muted-foreground'}`}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={esCheque} onChange={e => setEsCheque(e.target.checked)} />
               Es un cheque

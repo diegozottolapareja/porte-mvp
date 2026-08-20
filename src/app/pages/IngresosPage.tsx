@@ -62,6 +62,7 @@ export default function IngresosPage() {
           emptyTitle="Sin ingresos"
           emptyDescription="Todavía no se registraron cobros."
           emptyAction={{ label: 'Nuevo ingreso', onClick: () => navigate('/ingresos/nuevo') }}
+          className="lg:grid lg:grid-cols-2 lg:items-start"
           renderItem={ingreso => {
             const cheque = ingreso.chequeId ? cheques.find(c => c.id === ingreso.chequeId) : undefined
             return (

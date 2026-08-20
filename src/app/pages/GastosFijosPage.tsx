@@ -59,6 +59,7 @@ export default function GastosFijosPage() {
         keyExtractor={g => g.id}
         emptyTitle="Sin gastos fijos"
         emptyAction={can('gastosfijos:write') ? { label: 'Nuevo gasto fijo', onClick: () => setEditing('nuevo') } : undefined}
+        className="lg:grid lg:grid-cols-2 lg:items-start"
         renderItem={g => {
           const diferencia = calcDiferencia(g)
           const cheque = g.chequeId ? cheques.find(c => c.id === g.chequeId) : undefined
@@ -73,7 +74,15 @@ export default function GastosFijosPage() {
                       value={g.estado}
                       options={ESTADOS}
                       style={v => ESTADO_STYLE[v]}
-                      onChange={estado => updateGastoFijo(g.id, { estado })}
+                      onChange={estado => updateGastoFijo(g.id, {
+                        estado,
+                        // Marcar PAGADO desde acá es el camino rápido (sin
+                        // abrir el diálogo) — si todavía no hay un "Real"
+                        // cargado, se asume que se pagó lo previsto en vez
+                        // de dejar la tarjeta en un estado inconsistente
+                        // ("PAGADO" pero Real/Diferencia en "—").
+                        ...(estado === 'PAGADO' && g.montoReal === null ? { montoReal: g.montoPrevisto } : {}),
+                      })}
                     />
                   ) : (
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[g.estado].color} ${ESTADO_STYLE[g.estado].bgColor}`}>{g.estado}</span>

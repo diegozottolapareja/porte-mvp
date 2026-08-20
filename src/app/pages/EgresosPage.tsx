@@ -79,6 +79,7 @@ export default function EgresosPage() {
           emptyTitle="Sin egresos"
           emptyDescription="Todavía no se registraron pagos."
           emptyAction={{ label: 'Nuevo egreso', onClick: () => navigate('/egresos/nuevo') }}
+          className="lg:grid lg:grid-cols-2 lg:items-start"
           renderItem={egreso => {
             const chequeInfo = chequeDeEgreso(egreso)
             return (
