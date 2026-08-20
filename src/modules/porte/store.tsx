@@ -17,6 +17,7 @@ import type { MetodoPago } from './data/metodosPago'
 import type { Cheque, ChequeEstado } from './data/cheques'
 import type { TarjetaCredito, ResumenTarjeta } from './data/tarjetas'
 import type { CompromisoPago } from './data/compromisosPago'
+import type { Profile } from './data/profiles'
 import { validarPresupuestoParaVenta, construirVentaDesdePresupuesto, validarCondicionesComerciales, calcularCuotasTarjeta, type CondicionesComerciales } from './calculos'
 import { addDaysLocal, todayLocal } from '@/lib/format'
 import {
@@ -64,11 +65,11 @@ function nextSeqId(prefix: string, ids: string[]): string {
 }
 
 export type TableKey = 'ingresos' | 'egresos' | 'presupuestos' | 'ventas' | 'proveedores' | 'clientes' | 'gastosFijos' | 'variaciones' | 'aprendizajes'
-  | 'cajas' | 'metodosCobro' | 'metodosPago' | 'cheques' | 'tarjetas' | 'resumenesTarjeta' | 'compromisosPago'
+  | 'cajas' | 'metodosCobro' | 'metodosPago' | 'cheques' | 'tarjetas' | 'resumenesTarjeta' | 'compromisosPago' | 'profiles'
 
 const ALL_TABLE_KEYS: TableKey[] = [
   'ingresos', 'egresos', 'presupuestos', 'ventas', 'proveedores', 'clientes', 'gastosFijos', 'variaciones', 'aprendizajes',
-  'cajas', 'metodosCobro', 'metodosPago', 'cheques', 'tarjetas', 'resumenesTarjeta', 'compromisosPago',
+  'cajas', 'metodosCobro', 'metodosPago', 'cheques', 'tarjetas', 'resumenesTarjeta', 'compromisosPago', 'profiles',
 ]
 
 function porteKey(table: TableKey): QueryKey {
@@ -157,6 +158,11 @@ async function fetchCompromisosPago(): Promise<CompromisoPago[]> {
   if (error) throw error
   return (data ?? []).map(rowToCompromisoPago)
 }
+async function fetchProfiles(): Promise<Profile[]> {
+  const { data, error } = await supabase.from('profiles').select('id, nombre, role, activo').order('nombre')
+  if (error) throw error
+  return (data ?? []).map(r => ({ id: r.id, nombre: r.nombre, role: r.role, activo: r.activo }))
+}
 
 function useEntity<T>(table: TableKey, queryFn: () => Promise<T[]>): T[] {
   const { data } = useQuery({ queryKey: porteKey(table), queryFn })
@@ -181,6 +187,7 @@ export function useCheques(): Cheque[] { return useEntity('cheques', fetchCheque
 export function useTarjetas(): TarjetaCredito[] { return useEntity('tarjetas', fetchTarjetas) }
 export function useResumenesTarjeta(): ResumenTarjeta[] { return useEntity('resumenesTarjeta', fetchResumenesTarjeta) }
 export function useCompromisosPago(): CompromisoPago[] { return useEntity('compromisosPago', fetchCompromisosPago) }
+export function useProfiles(): Profile[] { return useEntity('profiles', fetchProfiles) }
 
 /**
  * Re-lee entidades puntuales desde Supabase. Necesario después de mutaciones

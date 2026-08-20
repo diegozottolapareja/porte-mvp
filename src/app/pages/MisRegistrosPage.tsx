@@ -1,22 +1,23 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Search, Trash2 } from 'lucide-react'
+import { Search, Trash2, ArrowDownCircle, ArrowUpCircle, FileText, Landmark, Wrench, GitBranch, Lightbulb, type LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/AppShell'
 import { EmptyState } from '@/components/EmptyState'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs'
 import {
-  useIngresos, useEgresos, usePresupuestos, useProveedores, useGastosFijos, useVariaciones, useAprendizajes,
+  useIngresos, useEgresos, usePresupuestos, useProveedores, useGastosFijos, useVariaciones, useAprendizajes, useProfiles,
   useIngresoActions, useEgresoActions, usePresupuestoActions, useProveedorActions, useGastoFijoActions, useVariacionActions, useAprendizajeActions,
 } from '@/modules/porte/store'
 import { formatCurrency, formatDate, localDateString } from '@/lib/format'
 
 type Tab = 'todos' | 'ingresos' | 'egresos' | 'presupuestos' | 'proveedores' | 'gastosfijos' | 'variaciones' | 'aprendizajes'
+type Tipo = 'Ingreso' | 'Egreso' | 'Presupuesto' | 'Proveedor' | 'Gasto fijo' | 'Variación' | 'Aprendizaje'
 
 interface Row {
   key: string
-  tipo: string
+  tipo: Tipo
   concepto: string
   obra?: string
   fecha: string
@@ -27,9 +28,19 @@ interface Row {
   onDelete: () => void
 }
 
-const USER_LABELS: Record<string, string> = {
-  'demo-admin': 'Gonza (admin)',
-  'demo-dataentry': 'Carga de datos',
+// Mismo esquema de ícono+color por tipo que ya usa CargaRapidaPage para
+// Ingreso/Egreso/Presupuesto — acá extendido a las 4 entidades restantes.
+// Sin esto, dos filas con el mismo código (ej. un presupuesto convertido en
+// venta comparte "PR-xxxx" con sus egresos) son casi indistinguibles a
+// simple vista, solo separadas por el sufijo de texto " · Tipo".
+const TIPO_ICON: Record<Tipo, { Icon: LucideIcon; bg: string; color: string }> = {
+  Ingreso: { Icon: ArrowDownCircle, bg: 'bg-green-100', color: 'text-green-700' },
+  Egreso: { Icon: ArrowUpCircle, bg: 'bg-red-100', color: 'text-red-700' },
+  Presupuesto: { Icon: FileText, bg: 'bg-blue-100', color: 'text-blue-700' },
+  Proveedor: { Icon: Landmark, bg: 'bg-indigo-100', color: 'text-indigo-700' },
+  'Gasto fijo': { Icon: Wrench, bg: 'bg-amber-100', color: 'text-amber-700' },
+  Variación: { Icon: GitBranch, bg: 'bg-purple-100', color: 'text-purple-700' },
+  Aprendizaje: { Icon: Lightbulb, bg: 'bg-yellow-100', color: 'text-yellow-700' },
 }
 
 const TABS: Array<{ value: Tab; label: string }> = [
@@ -58,6 +69,8 @@ export default function MisRegistrosPage() {
   const gastosFijos = useGastosFijos()
   const variaciones = useVariaciones()
   const aprendizajes = useAprendizajes()
+  const profiles = useProfiles()
+  const userLabels: Record<string, string> = Object.fromEntries(profiles.map(p => [p.id, p.nombre]))
   const { softDeleteIngreso } = useIngresoActions()
   const { softDeleteEgreso } = useEgresoActions()
   const { softDeletePresupuesto } = usePresupuestoActions()
@@ -75,31 +88,31 @@ export default function MisRegistrosPage() {
 
   const rows: Row[] = [
     ...ingresos.filter(i => i.activo).map(i => ({
-      key: `in-${i.ref}`, tipo: 'Ingreso', concepto: i.concepto, obra: i.id, fecha: i.fecha, monto: i.monto, estado: i.estado, createdBy: i.createdBy,
+      key: `in-${i.ref}`, tipo: 'Ingreso' as const, concepto: i.concepto, obra: i.id, fecha: i.fecha, monto: i.monto, estado: i.estado, createdBy: i.createdBy,
       editPath: `/ingresos/nuevo?ref=${i.ref}`, onDelete: () => softDeleteIngreso(i.ref),
     })),
     ...egresos.filter(e => e.activo).map(e => ({
-      key: `eg-${e.ref}`, tipo: 'Egreso', concepto: e.tipoEgreso, obra: e.id, fecha: e.fecha, monto: e.monto, estado: e.estado, createdBy: e.createdBy,
+      key: `eg-${e.ref}`, tipo: 'Egreso' as const, concepto: e.tipoEgreso, obra: e.id, fecha: e.fecha, monto: e.monto, estado: e.estado, createdBy: e.createdBy,
       editPath: `/egresos/nuevo?ref=${e.ref}`, onDelete: () => softDeleteEgreso(e.ref),
     })),
     ...presupuestos.filter(p => p.activo).map(p => ({
-      key: `pr-${p.id}`, tipo: 'Presupuesto', concepto: p.descripcion || p.cliente, obra: p.id, fecha: p.fecha, monto: p.montoTotal, estado: p.estadoComercial, createdBy: p.createdBy,
+      key: `pr-${p.id}`, tipo: 'Presupuesto' as const, concepto: p.descripcion || p.cliente, obra: p.id, fecha: p.fecha, monto: p.montoTotal, estado: p.estadoComercial, createdBy: p.createdBy,
       editPath: `/presupuestos/${encodeURIComponent(p.id)}`, onDelete: () => softDeletePresupuesto(p.id),
     })),
     ...proveedores.filter(p => p.activo).map(p => ({
-      key: `prov-${p.idProv}`, tipo: 'Proveedor', concepto: p.nombre, obra: p.idProv, fecha: p.fechaSaldoInicial, monto: p.saldoCc, estado: p.rubro, createdBy: p.createdBy,
+      key: `prov-${p.idProv}`, tipo: 'Proveedor' as const, concepto: p.nombre, obra: p.idProv, fecha: p.fechaSaldoInicial, monto: p.saldoCc, estado: p.rubro, createdBy: p.createdBy,
       editPath: `/proveedores/${encodeURIComponent(p.idProv)}`, onDelete: () => softDeleteProveedor(p.idProv),
     })),
     ...gastosFijos.filter(g => g.activo).map(g => ({
-      key: `gf-${g.id}`, tipo: 'Gasto fijo', concepto: g.concepto, obra: undefined, fecha: g.fecha, monto: g.montoPrevisto, estado: g.estado, createdBy: g.createdBy,
+      key: `gf-${g.id}`, tipo: 'Gasto fijo' as const, concepto: g.concepto, obra: undefined, fecha: g.fecha, monto: g.montoPrevisto, estado: g.estado, createdBy: g.createdBy,
       editPath: '/gastos-fijos', onDelete: () => softDeleteGastoFijo(g.id),
     })),
     ...variaciones.filter(v => v.activo).map(v => ({
-      key: `var-${v.idVar}`, tipo: 'Variación', concepto: v.descripcion, obra: v.idPres, fecha: v.fecha, monto: v.impacto, estado: v.tipoVar, createdBy: v.createdBy,
+      key: `var-${v.idVar}`, tipo: 'Variación' as const, concepto: v.descripcion, obra: v.idPres, fecha: v.fecha, monto: v.impacto, estado: v.tipoVar, createdBy: v.createdBy,
       editPath: '/variaciones', onDelete: () => softDeleteVariacion(v.idVar),
     })),
     ...aprendizajes.filter(a => a.activo).map(a => ({
-      key: `apr-${a.idApr}`, tipo: 'Aprendizaje', concepto: a.queSalioBien, obra: a.idPres, fecha: a.fechaCierre, monto: undefined, estado: a.causaDesvio, createdBy: a.createdBy,
+      key: `apr-${a.idApr}`, tipo: 'Aprendizaje' as const, concepto: a.queSalioBien, obra: a.idPres, fecha: a.fechaCierre, monto: undefined, estado: a.causaDesvio, createdBy: a.createdBy,
       editPath: '/aprendizajes', onDelete: () => softDeleteAprendizaje(a.idApr),
     })),
   ]
@@ -161,8 +174,8 @@ export default function MisRegistrosPage() {
 
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
           <button onClick={() => setUserFilter('all')} className={`shrink-0 px-3 py-1.5 rounded-xl border text-sm ${userFilter === 'all' ? 'bg-primary text-white border-primary' : 'bg-white text-muted-foreground border-border'}`}>Todos los usuarios</button>
-          {Object.entries(USER_LABELS).map(([id, label]) => (
-            <button key={id} onClick={() => setUserFilter(id)} className={`shrink-0 px-3 py-1.5 rounded-xl border text-sm ${userFilter === id ? 'bg-primary text-white border-primary' : 'bg-white text-muted-foreground border-border'}`}>{label}</button>
+          {profiles.map(p => (
+            <button key={p.id} onClick={() => setUserFilter(p.id)} className={`shrink-0 px-3 py-1.5 rounded-xl border text-sm ${userFilter === p.id ? 'bg-primary text-white border-primary' : 'bg-white text-muted-foreground border-border'}`}>{p.nombre}</button>
           ))}
         </div>
 
@@ -187,20 +200,26 @@ export default function MisRegistrosPage() {
                   <p className="text-xs font-semibold text-muted-foreground">{formatCurrency(items.reduce((s, r) => s + (r.monto ?? 0), 0))}</p>
                 </div>
                 <div className="space-y-2">
-                  {items.map(r => (
-                    <div key={r.key} className="bg-white rounded-2xl border border-border p-3 flex items-center gap-3">
-                      <button onClick={() => navigate(r.editPath)} className="flex-1 min-w-0 text-left">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-medium truncate">{r.obra ?? 'Gasto fijo'} · {r.tipo}</p>
-                          {r.monto !== undefined && <p className="text-sm font-semibold shrink-0">{formatCurrency(r.monto)}</p>}
+                  {items.map(r => {
+                    const { Icon, bg, color } = TIPO_ICON[r.tipo]
+                    return (
+                      <div key={r.key} className="bg-white rounded-2xl border border-border p-3 flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}`}>
+                          <Icon className={`w-5 h-5 ${color}`} />
                         </div>
-                        <p className="text-xs text-muted-foreground truncate">{r.concepto} · {r.estado}{userFilter === 'all' ? ` · ${USER_LABELS[r.createdBy] ?? r.createdBy}` : ''}</p>
-                      </button>
-                      <button onClick={() => setPendingDelete(r)} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+                        <button onClick={() => navigate(r.editPath)} className="flex-1 min-w-0 text-left">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium truncate">{r.obra ?? 'Gasto fijo'} · {r.tipo}</p>
+                            {r.monto !== undefined && <p className="text-sm font-semibold shrink-0">{formatCurrency(r.monto)}</p>}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{r.concepto} · {r.estado}{userFilter === 'all' ? ` · ${userLabels[r.createdBy] ?? r.createdBy}` : ''}</p>
+                        </button>
+                        <button onClick={() => setPendingDelete(r)} className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ))}
