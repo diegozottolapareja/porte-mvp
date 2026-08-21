@@ -12,19 +12,15 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
 import { ChequeAttachDialog } from '@/components/ChequeAttachDialog'
 import { EntityDetailDialog } from '@/components/EntityDetailDialog'
+import { MovimientoFilterBar, type FiltroEstadoAdmin } from '@/components/MovimientoFilterBar'
 import { useEgresos, useVentas, useEgresoActions, chequeDeEgreso, useCompromisosPago, useCompromisoPagoActions, useChequeActions, useCheques } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { CHEQUE_ESTADO_STYLE, chequeImpactaCaja, type EstadoEgreso, type Egreso, type Cheque } from '@/modules/porte'
 
-// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
-// el modelo real (`useChequeDeEgreso`), nunca este campo administrativo. Se
-// mantiene en el tipo/estilo solo para que una fila existente con ese valor
-// (de antes de esta migración) siga mostrando un label en vez de romper.
 const ESTADO_STYLE: Record<EstadoEgreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
   Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
-  Emitido: { label: 'Cheque emitido', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
 }
 const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente']
 
@@ -42,7 +38,13 @@ export default function EgresosPage() {
   const [pendingCheque, setPendingCheque] = useState<{ cheque: Cheque; compromisoId: string } | null>(null)
   const [pendingAttach, setPendingAttach] = useState<Egreso | null>(null)
   const [viewing, setViewing] = useState<Egreso | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstadoAdmin>('todos')
+  const [soloConCheque, setSoloConCheque] = useState(false)
   const activos = egresos.filter(e => e.activo)
+  const visibles = activos.filter(e =>
+    (filtroEstado === 'todos' || e.estado === filtroEstado) &&
+    (!soloConCheque || !!chequeDeEgreso(e, cheques, compromisosPago)),
+  )
   const puedeEditar = can('egresos:write')
   const puedeEliminar = can('egresos:delete')
 
@@ -77,8 +79,15 @@ export default function EgresosPage() {
           </div>
         )}
 
+        <MovimientoFilterBar
+          filtroEstado={filtroEstado}
+          onFiltroEstadoChange={setFiltroEstado}
+          soloConCheque={soloConCheque}
+          onSoloConChequeChange={setSoloConCheque}
+        />
+
         <EntityList
-          items={activos}
+          items={visibles}
           keyExtractor={e => e.ref}
           emptyTitle="Sin egresos"
           emptyDescription="Todavía no se registraron pagos."
@@ -92,18 +101,25 @@ export default function EgresosPage() {
                 subtitle={`${egreso.tipoEgreso} · ${egreso.id ?? 'Gasto fijo'} · ${formatDate(egreso.fecha)}`}
                 onClick={() => setViewing(egreso)}
                 statusNode={
-                  puedeEditar ? (
-                    <PillSelect
-                      value={egreso.estado}
-                      options={ESTADOS_EGRESO}
-                      style={v => ESTADO_STYLE[v]}
-                      onChange={estado => updateEgreso(egreso.ref, { estado })}
-                    />
-                  ) : (
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
-                      {ESTADO_STYLE[egreso.estado].label}
-                    </span>
-                  )
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {puedeEditar ? (
+                      <PillSelect
+                        value={egreso.estado}
+                        options={ESTADOS_EGRESO}
+                        style={v => ESTADO_STYLE[v]}
+                        onChange={estado => updateEgreso(egreso.ref, { estado })}
+                      />
+                    ) : (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_STYLE[egreso.estado].color} ${ESTADO_STYLE[egreso.estado].bgColor}`}>
+                        {ESTADO_STYLE[egreso.estado].label}
+                      </span>
+                    )}
+                    {chequeInfo && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].color} ${CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].bgColor}`}>
+                        Cheque · {CHEQUE_ESTADO_STYLE[chequeInfo.cheque.estado].label}
+                      </span>
+                    )}
+                  </div>
                 }
                 fields={[
                   { label: 'Monto', value: formatCurrency(egreso.monto), highlight: true, row: 1, rowSpan: 2, size: 'lg' },

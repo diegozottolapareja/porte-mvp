@@ -3,11 +3,10 @@ import type { TipoEgreso, Cuenta, TipoCaja } from './config'
 // ─── Egresos (04_EGRESOS) ──────────────────────────────────────────────────────
 // La tab está vacía en el Excel original — datos inventados coherentes con obras y proveedores.
 
-// 'Emitido' ya no es seleccionable en ninguna pantalla (ver ChequeAttachDialog
-// / useChequeDeEgreso — la existencia de un cheque la determina el modelo real
-// de `cheques`, no este campo) pero se mantiene en el tipo por compatibilidad
-// de lectura con filas existentes que ya lo tengan guardado.
-export type EstadoEgreso = 'Confirmado' | 'Pendiente' | 'Emitido'
+// El estado administrativo del egreso es independiente del cheque — la
+// existencia de un cheque la determina el modelo real de `cheques` (ver
+// ChequeAttachDialog / useChequeDeEgreso), nunca este campo.
+export type EstadoEgreso = 'Confirmado' | 'Pendiente'
 
 export interface Egreso {
   fecha: string
@@ -36,7 +35,7 @@ const RAW_EGRESOS: Omit<Egreso, 'activo' | 'createdAt' | 'createdBy' | 'updatedA
   { fecha: '2026-06-13', tipoEgreso: 'MANO DE OBRA',  id: 'PR - 0530', categoria: 'MANO DE OBRA', monto: 450000.00, cuenta: 'Efectivo Blanco', caja: 'BLANCA', estado: 'Confirmado', ref: 'EG-0003' },
   { fecha: '2026-06-16', tipoEgreso: 'FLETE',          id: 'PR - 0532', proveedor: 'PROV-003', categoria: 'FLETE',        monto: 45000.00,  cuenta: 'Efectivo Blanco', caja: 'BLANCA', estado: 'Confirmado', ref: 'EG-0004' },
   { fecha: '2026-06-22', tipoEgreso: 'HERRAMIENTAS',  categoria: 'HERRAMIENTAS', monto: 120000.00, cuenta: 'Banco Macro', caja: 'BLANCA', estado: 'Confirmado', ref: 'EG-0005' },
-  { fecha: '2026-06-28', tipoEgreso: 'MATERIALES',    id: 'PR - 0536', proveedor: 'PROV-001', categoria: 'MATERIALES',   monto: 900000.00, cuenta: 'Banco Macro', caja: 'BLANCA', estado: 'Emitido', ref: 'EG-0006', fechaEmision: '2026-06-28', fechaAcreditacion: '2026-08-15' },
+  { fecha: '2026-06-28', tipoEgreso: 'MATERIALES',    id: 'PR - 0536', proveedor: 'PROV-001', categoria: 'MATERIALES',   monto: 900000.00, cuenta: 'Banco Macro', caja: 'BLANCA', estado: 'Confirmado', ref: 'EG-0006', fechaEmision: '2026-06-28', fechaAcreditacion: '2026-08-15' },
   { fecha: '2026-07-01', tipoEgreso: 'COMBUSTIBLE',   categoria: 'COMBUSTIBLE',   monto: 35000.00,  cuenta: 'Efectivo Blanco', caja: 'BLANCA', estado: 'Confirmado', ref: 'EG-0007' },
   { fecha: '2026-07-06', tipoEgreso: 'SERVICIOS',      id: 'PR - 0546', proveedor: 'PROV-003', categoria: 'SERVICIOS',    monto: 60000.00,  cuenta: 'MercadoPago', caja: 'BLANCA', estado: 'Pendiente', ref: 'EG-0008' },
   { fecha: '2026-07-10', tipoEgreso: 'IMPUESTOS',      categoria: 'IMPUESTOS',       monto: 210000.00, cuenta: 'Banco Macro', caja: 'BLANCA', estado: 'Confirmado', ref: 'EG-0009' },

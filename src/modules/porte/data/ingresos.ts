@@ -2,7 +2,10 @@ import type { TipoIngreso, Cuenta, TipoCaja } from './config'
 
 // ─── Ingresos (03_INGRESOS) ────────────────────────────────────────────────────
 
-export type EstadoIngreso = 'Confirmado' | 'Pendiente' | 'Emitido'
+// El estado administrativo del ingreso es independiente del cheque — la
+// existencia de un cheque la determina el modelo real de `cheques` (ver
+// ChequeAttachDialog / chequeDeIngreso), nunca este campo.
+export type EstadoIngreso = 'Confirmado' | 'Pendiente'
 
 export interface Ingreso {
   fecha: string        // YYYY-MM-DD

@@ -17,8 +17,6 @@ import { supabase } from '@/lib/supabaseClient'
 // Categoría directa/indirecta puede repetirse entre las dos listas (ej.
 // SERVICIOS, HERRAMIENTAS) — se muestran una sola vez.
 const CATEGORIAS_EGRESO = [...new Set([...CONFIG_LISTS.CATEG_DIRECTOS, ...CONFIG_LISTS.CATEG_INDIRECTOS])]
-// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
-// el modelo real (ver `chequeLigado`/`chequeDeEgreso`), nunca este campo.
 const ESTADOS_EGRESO: EstadoEgreso[] = ['Confirmado', 'Pendiente']
 
 // Gate de carga: en una navegación en frío (F5 / deep link a

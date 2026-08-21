@@ -12,8 +12,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate, todayLocal } from '@/lib/format'
 import { toPositiveAmount } from '@/lib/validation'
 
-// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
-// el modelo real (ver `chequeLigado`/`chequeDeIngreso`), nunca este campo.
 const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 
 // Gate de carga: en una navegación en frío (F5 / deep link a `?ref=IN-XXXX`),

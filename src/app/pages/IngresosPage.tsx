@@ -12,19 +12,15 @@ import { ConfirmModal } from '@/components/ConfirmModal'
 import { ChequeEstadoDialog } from '@/components/ChequeEstadoDialog'
 import { ChequeAttachDialog } from '@/components/ChequeAttachDialog'
 import { EntityDetailDialog } from '@/components/EntityDetailDialog'
+import { MovimientoFilterBar, type FiltroEstadoAdmin } from '@/components/MovimientoFilterBar'
 import { useIngresos, useVentas, useIngresoActions, chequeDeIngreso, useCheques, useChequeActions } from '@/modules/porte/store'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency, formatDate } from '@/lib/format'
 import { CHEQUE_ESTADO_STYLE, type EstadoIngreso, type Ingreso, type Cheque } from '@/modules/porte'
 
-// 'Emitido' no es seleccionable acá — la existencia de un cheque la resuelve
-// el modelo real (`chequeDeIngreso`), nunca este campo administrativo. Se
-// mantiene en el tipo/estilo solo para que una fila existente con ese valor
-// (de antes de esta migración) siga mostrando un label en vez de romper.
 const ESTADO_INGRESO_STYLE: Record<EstadoIngreso, { label: string; color: string; bgColor: string }> = {
   Confirmado: { label: 'Confirmado', color: 'text-green-700', bgColor: 'bg-green-100' },
   Pendiente: { label: 'Pendiente', color: 'text-amber-700', bgColor: 'bg-amber-100' },
-  Emitido: { label: 'Cheque emitido', color: 'text-indigo-700', bgColor: 'bg-indigo-100' },
 }
 const ESTADOS_INGRESO: EstadoIngreso[] = ['Confirmado', 'Pendiente']
 
@@ -40,7 +36,13 @@ export default function IngresosPage() {
   const [pendingCheque, setPendingCheque] = useState<Cheque | null>(null)
   const [pendingAttach, setPendingAttach] = useState<Ingreso | null>(null)
   const [viewing, setViewing] = useState<Ingreso | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstadoAdmin>('todos')
+  const [soloConCheque, setSoloConCheque] = useState(false)
   const activos = ingresos.filter(i => i.activo)
+  const visibles = activos.filter(i =>
+    (filtroEstado === 'todos' || i.estado === filtroEstado) &&
+    (!soloConCheque || !!chequeDeIngreso(i, cheques)),
+  )
   const puedeEditar = can('ingresos:write')
   const puedeEliminar = can('ingresos:delete')
 
@@ -49,10 +51,6 @@ export default function IngresosPage() {
     setViewing(null)
     navigate(`/ingresos/nuevo?ref=${encodeURIComponent(ingreso.ref)}`)
   }
-
-  const totalPeriodo = activos
-    .filter(i => i.estado === 'Confirmado')
-    .reduce((sum, i) => sum + i.monto, 0)
 
   return (
     <AppShell
@@ -66,13 +64,15 @@ export default function IngresosPage() {
       <div className="space-y-4">
         <MovimientosTabs active="ingresos" />
 
-        <div className="bg-white rounded-2xl border border-border p-4 flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">Total confirmado</p>
-          <p className="text-xl font-semibold text-green-700">{formatCurrency(totalPeriodo)}</p>
-        </div>
+        <MovimientoFilterBar
+          filtroEstado={filtroEstado}
+          onFiltroEstadoChange={setFiltroEstado}
+          soloConCheque={soloConCheque}
+          onSoloConChequeChange={setSoloConCheque}
+        />
 
         <EntityList
-          items={activos}
+          items={visibles}
           keyExtractor={i => i.ref}
           emptyTitle="Sin ingresos"
           emptyDescription="Todavía no se registraron cobros."
@@ -86,18 +86,25 @@ export default function IngresosPage() {
                 subtitle={`${ingreso.concepto} · ${ingreso.id} · ${formatDate(ingreso.fecha)}`}
                 onClick={() => setViewing(ingreso)}
                 statusNode={
-                  puedeEditar ? (
-                    <PillSelect
-                      value={ingreso.estado}
-                      options={ESTADOS_INGRESO}
-                      style={v => ESTADO_INGRESO_STYLE[v]}
-                      onChange={estado => updateIngreso(ingreso.ref, { estado })}
-                    />
-                  ) : (
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_INGRESO_STYLE[ingreso.estado].color} ${ESTADO_INGRESO_STYLE[ingreso.estado].bgColor}`}>
-                      {ESTADO_INGRESO_STYLE[ingreso.estado].label}
-                    </span>
-                  )
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {puedeEditar ? (
+                      <PillSelect
+                        value={ingreso.estado}
+                        options={ESTADOS_INGRESO}
+                        style={v => ESTADO_INGRESO_STYLE[v]}
+                        onChange={estado => updateIngreso(ingreso.ref, { estado })}
+                      />
+                    ) : (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_INGRESO_STYLE[ingreso.estado].color} ${ESTADO_INGRESO_STYLE[ingreso.estado].bgColor}`}>
+                        {ESTADO_INGRESO_STYLE[ingreso.estado].label}
+                      </span>
+                    )}
+                    {cheque && (
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${CHEQUE_ESTADO_STYLE[cheque.estado].color} ${CHEQUE_ESTADO_STYLE[cheque.estado].bgColor}`}>
+                        Cheque · {CHEQUE_ESTADO_STYLE[cheque.estado].label}
+                      </span>
+                    )}
+                  </div>
                 }
                 fields={[
                   { label: 'Monto', value: formatCurrency(ingreso.monto), highlight: true, row: 1, rowSpan: 2, size: 'lg' },
